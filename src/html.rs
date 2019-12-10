@@ -438,7 +438,7 @@ pub async fn walk_and_embed_assets(
     opt_silent: bool,
     opt_insecure: bool,
     opt_no_frames: bool,
-) {
+) -> Result<(), wasm_bindgen::JsValue> {
     match node.data {
         NodeData::Document => {
             // Dig deeper
@@ -498,8 +498,7 @@ pub async fn walk_and_embed_assets(
                                         opt_silent,
                                         opt_insecure,
                                     )
-                                    .await
-                                    .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
+                                    .await?;
                                     attr.value.clear();
                                     attr.value.push_slice(favicon_dataurl.as_str());
                                 }
@@ -523,8 +522,7 @@ pub async fn walk_and_embed_assets(
                                         opt_silent,
                                         opt_insecure,
                                     )
-                                    .await
-                                    .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
+                                    .await?;
                                     attr.value.clear();
                                     attr.value.push_slice(css_dataurl.as_str());
                                 }
@@ -567,8 +565,7 @@ pub async fn walk_and_embed_assets(
                                     opt_silent,
                                     opt_insecure,
                                 )
-                                .await
-                                .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
+                                .await?;
                                 attr.value.clear();
                                 attr.value.push_slice(img_dataurl.as_str());
                             }
@@ -602,8 +599,7 @@ pub async fn walk_and_embed_assets(
                                         opt_silent,
                                         opt_insecure,
                                     )
-                                    .await
-                                    .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
+                                    .await?;
                                     attr.value.clear();
                                     attr.value.push_slice(source_dataurl.as_str());
                                 }
@@ -650,8 +646,7 @@ pub async fn walk_and_embed_assets(
                                     opt_silent,
                                     opt_insecure,
                                 )
-                                .await
-                                .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
+                                .await?;
                                 attr.value.clear();
                                 attr.value.push_slice(js_dataurl.as_str());
                             }
@@ -705,8 +700,7 @@ pub async fn walk_and_embed_assets(
                                 opt_silent,
                                 opt_insecure,
                             )
-                            .await
-                            .unwrap_or((EMPTY_STRING.clone(), src_full_url));
+                            .await?;
                             let dom = html_to_dom(&iframe_data);
                             walk_and_embed_assets(
                                 cache,
@@ -752,8 +746,7 @@ pub async fn walk_and_embed_assets(
                                     opt_silent,
                                     opt_insecure,
                                 )
-                                .await
-                                .unwrap_or((poster_full_url, EMPTY_STRING.clone()));
+                                .await?;
                                 attr.value.clear();
                                 attr.value.push_slice(poster_dataurl.as_str());
                             }
@@ -814,6 +807,7 @@ pub async fn walk_and_embed_assets(
             //       by browsers other than IE [5, 9]
         }
     }
+    Ok(())
 }
 
 pub fn html_to_dom(data: &str) -> html5ever::rcdom::RcDom {
