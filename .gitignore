@@ -7,3 +7,5 @@
 
 # Exclude accidental HTML files
 *.html
+
+/pkg

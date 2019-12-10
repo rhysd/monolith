@@ -1,9 +1,8 @@
-use reqwest::header::{CONTENT_TYPE, USER_AGENT};
-use reqwest::Client;
 use std::collections::HashMap;
 use std::time::Duration;
 use crate::utils::{data_to_dataurl, is_data_url};
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn retrieve_asset(
     cache: &mut HashMap<String, String>,
     url: &str,
@@ -13,6 +12,9 @@ pub fn retrieve_asset(
     opt_silent: bool,
     opt_insecure: bool,
 ) -> Result<(String, String), reqwest::Error> {
+    use reqwest::header::{CONTENT_TYPE, USER_AGENT};
+    use reqwest::Client;
+
     if is_data_url(&url).unwrap() {
         Ok((url.to_string(), url.to_string()))
     } else {
@@ -65,5 +67,34 @@ pub fn retrieve_asset(
                 Ok((content, response.url().to_string()))
             }
         }
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn retrieve_asset(
+    cache: &mut HashMap<String, String>,
+    url: &str,
+    as_dataurl: bool,
+    mime: &str,
+    opt_user_agent: &str,
+    opt_silent: bool,
+    opt_insecure: bool,
+) -> Result<(String, String), wasm_bindgen::JsValue> {
+    assert!(!as_dataurl);
+
+    let url_str = url.to_string();
+    if is_data_url(&url).unwrap() {
+        Ok((url_str.clone(), url_str))
+    } else if cache.contains_key(&url_str) {
+        // url is in cache
+        if !opt_silent {
+            eprintln!("[ {} ] (from cache)", &url);
+        }
+        let data = cache.get(&url_str).unwrap();
+        Ok((data.to_string(), url_str))
+    } else {
+        // url not in cache, we request it
+        // TODO
+        unimplemented!()
     }
 }
