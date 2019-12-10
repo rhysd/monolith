@@ -8,6 +8,7 @@ authors = [
     "rhysd <https://rhysd.github.io>",
 ]
 description = "CLI tool for saving web pages as a single HTML file"
+edition = "2018"
 
 [dependencies]
 base64 = "0.10.1"

@@ -1,4 +1,4 @@
-extern crate base64;
+use base64;
 
 use self::base64::encode;
 use regex::Regex;

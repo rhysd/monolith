@@ -5,11 +5,11 @@ use html5ever::serialize::{serialize, SerializeOpts};
 use html5ever::tendril::{format_tendril, TendrilSink};
 use html5ever::tree_builder::{Attribute, TreeSink};
 use html5ever::{local_name, namespace_url, ns};
-use http::retrieve_asset;
-use js::attr_is_event_handler;
+use crate::http::retrieve_asset;
+use crate::js::attr_is_event_handler;
 use std::collections::HashMap;
 use std::default::Default;
-use utils::{data_to_dataurl, is_valid_url, resolve_url, url_has_protocol};
+use crate::utils::{data_to_dataurl, is_valid_url, resolve_url, url_has_protocol};
 
 lazy_static! {
     static ref EMPTY_STRING: String = String::new();

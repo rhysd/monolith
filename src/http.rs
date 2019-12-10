@@ -2,7 +2,7 @@ use reqwest::header::{CONTENT_TYPE, USER_AGENT};
 use reqwest::Client;
 use std::collections::HashMap;
 use std::time::Duration;
-use utils::{data_to_dataurl, is_data_url};
+use crate::utils::{data_to_dataurl, is_data_url};
 
 pub fn retrieve_asset(
     cache: &mut HashMap<String, String>,
