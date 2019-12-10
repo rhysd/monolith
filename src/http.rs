@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::time::Duration;
 use crate::utils::{data_to_dataurl, is_data_url};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -14,6 +13,7 @@ pub fn retrieve_asset(
 ) -> Result<(String, String), reqwest::Error> {
     use reqwest::header::{CONTENT_TYPE, USER_AGENT};
     use reqwest::Client;
+    use std::time::Duration;
 
     if is_data_url(&url).unwrap() {
         Ok((url.to_string(), url.to_string()))
@@ -78,9 +78,12 @@ pub async fn retrieve_asset(
     mime: &str,
     opt_user_agent: &str,
     opt_silent: bool,
-    opt_insecure: bool,
+    _opt_insecure: bool,
 ) -> Result<(String, String), wasm_bindgen::JsValue> {
-    assert!(!as_dataurl);
+    use wasm_bindgen_futures::JsFuture;
+    use wasm_bindgen::JsCast;
+    use web_sys::{Response, Request};
+    use js_sys::Uint8Array;
 
     let url_str = url.to_string();
     if is_data_url(&url).unwrap() {
@@ -91,10 +94,48 @@ pub async fn retrieve_asset(
             eprintln!("[ {} ] (from cache)", &url);
         }
         let data = cache.get(&url_str).unwrap();
-        Ok((data.to_string(), url_str))
+        Ok((data.clone(), url_str))
     } else {
         // url not in cache, we request it
-        // TODO
-        unimplemented!()
+        let win = web_sys::window().unwrap();
+        let promise = if opt_user_agent.is_empty() {
+            win.fetch_with_str(&url_str)
+        } else {
+            let request = Request::new_with_str(&url_str)?;
+            request.headers().set("User-Agent", opt_user_agent)?;
+            win.fetch_with_request(&request)
+        };
+
+        let response = JsFuture::from(promise).await?;
+        let response: Response = response.dyn_into()?;
+        if !response.ok() {
+            return Err(format!("Could not fetch {}: {}", &url_str, response.status_text()).into());
+        }
+
+        let res_url = response.url();
+        if !opt_silent {
+            if url_str == res_url {
+                eprintln!("[ {} ]", &url_str);
+            } else {
+                eprintln!("[ {} -> {} ]", &url_str, &res_url);
+            }
+        }
+
+        if as_dataurl {
+            let buffer = JsFuture::from(response.array_buffer()?).await?;
+            let data = Uint8Array::new(&buffer).to_vec();
+            let mimetype = if mime.is_empty() {
+                response.headers().get("Content-Type")?.unwrap_or_else(|| mime.to_string())
+            } else {
+                mime.to_string()
+            };
+            let dataurl = data_to_dataurl(&mimetype, &data);
+            cache.insert(res_url.clone(), dataurl.clone());
+            Ok((dataurl, res_url))
+        } else {
+            let content = JsFuture::from(response.text()?).await?.as_string().unwrap();
+            cache.insert(res_url.clone(), content.clone());
+            Ok((content, res_url))
+        }
     }
 }
