@@ -47,7 +47,7 @@ pub async fn monolith(
         silent,
         insecure,
         no_frames,
-    ).await;
+    ).await?;
 
     let html = stringify_document(
         &dom.document,
