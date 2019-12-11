@@ -1,0 +1,19 @@
+{
+  "name": "monolith",
+  "collaborators": [
+    "Sunshine <sunshine@uberspace.net>",
+    "Mahdi Robatipoor <mahdi.robatipoor@gmail.com>",
+    "Emmanuel Delaborde <th3rac25@gmail.com>",
+    "rhysd <https://rhysd.github.io>"
+  ],
+  "description": "CLI tool for saving web pages as a single HTML file",
+  "version": "2.0.23",
+  "files": [
+    "monolith_bg.wasm",
+    "monolith.js",
+    "monolith.d.ts"
+  ],
+  "module": "monolith.js",
+  "types": "monolith.d.ts",
+  "sideEffects": "false"
+}
