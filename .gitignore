@@ -4,3 +4,6 @@
 !/*.wasm
 !/package.json
 !/snippets
+!/snippets/**/
+!/snippets/**/*.js
+!/LICENSE
