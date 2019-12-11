@@ -71,6 +71,25 @@ pub fn retrieve_asset(
 }
 
 #[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(module = "/src/fetch.js")]
+extern "C" {
+    type FetchedData;
+    #[wasm_bindgen(method, getter)]
+    fn data(this: &FetchedData) -> Vec<u8>;
+    #[wasm_bindgen(method, getter)]
+    fn text(this: &FetchedData) -> String;
+    #[wasm_bindgen(method, getter)]
+    fn mime(this: &FetchedData) -> String;
+    #[wasm_bindgen(method, getter)]
+    fn url(this: &FetchedData) -> String;
+    #[wasm_bindgen(js_name = fetchData)]
+    fn fetch_data(url: &str, user_agent: &str, wantBinary: bool) -> js_sys::Promise;
+}
+
+#[cfg(target_arch = "wasm32")]
 pub async fn retrieve_asset(
     cache: &mut HashMap<String, String>,
     url: &str,
@@ -82,8 +101,7 @@ pub async fn retrieve_asset(
 ) -> Result<(String, String), wasm_bindgen::JsValue> {
     use wasm_bindgen_futures::JsFuture;
     use wasm_bindgen::JsCast;
-    use web_sys::{Response, Request};
-    use js_sys::Uint8Array;
+    use web_sys::console;
 
     let url_str = url.to_string();
     if is_data_url(&url).unwrap() {
@@ -91,41 +109,27 @@ pub async fn retrieve_asset(
     } else if cache.contains_key(&url_str) {
         // url is in cache
         if !opt_silent {
-            eprintln!("[ {} ] (from cache)", &url);
+            console::log_1(&JsValue::from(format!("Cache hit: {}", &url_str)));
         }
         let data = cache.get(&url_str).unwrap();
         Ok((data.clone(), url_str))
     } else {
         // url not in cache, we request it
-        let win = web_sys::window().unwrap();
-        let promise = if opt_user_agent.is_empty() {
-            win.fetch_with_str(&url_str)
-        } else {
-            let request = Request::new_with_str(&url_str)?;
-            request.headers().set("User-Agent", opt_user_agent)?;
-            win.fetch_with_request(&request)
-        };
+        let fetched: FetchedData = JsFuture::from(fetch_data(&url_str, opt_user_agent, as_dataurl)).await?.dyn_into()?;
 
-        let response = JsFuture::from(promise).await?;
-        let response: Response = response.dyn_into()?;
-        if !response.ok() {
-            return Err(format!("Could not fetch {}: {}", &url_str, response.status_text()).into());
-        }
-
-        let res_url = response.url();
+        let res_url = fetched.url();
         if !opt_silent {
             if url_str == res_url {
-                eprintln!("[ {} ]", &url_str);
+                console::log_1(&JsValue::from(format!("Retrieve: {}", &url_str)));
             } else {
-                eprintln!("[ {} -> {} ]", &url_str, &res_url);
+                console::log_1(&JsValue::from(format!("Retrieve: {} -> {}", &url_str, &res_url)));
             }
         }
 
         if as_dataurl {
-            let buffer = JsFuture::from(response.array_buffer()?).await?;
-            let data = Uint8Array::new(&buffer).to_vec();
+            let data = fetched.data();
             let mimetype = if mime.is_empty() {
-                response.headers().get("Content-Type")?.unwrap_or_else(|| mime.to_string())
+                fetched.mime()
             } else {
                 mime.to_string()
             };
@@ -133,7 +137,7 @@ pub async fn retrieve_asset(
             cache.insert(res_url.clone(), dataurl.clone());
             Ok((dataurl, res_url))
         } else {
-            let content = JsFuture::from(response.text()?).await?.as_string().unwrap();
+            let content = fetched.text();
             cache.insert(res_url.clone(), content.clone());
             Ok((content, res_url))
         }
