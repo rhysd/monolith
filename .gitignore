@@ -1,0 +1,6 @@
+*
+!/*.js
+!/*.d.ts
+!/*.wasm
+!/package.json
+!/snippets
