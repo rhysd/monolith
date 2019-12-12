@@ -438,7 +438,9 @@ pub fn walk_and_embed_assets<'a>(
     opt_silent: bool,
     opt_insecure: bool,
     opt_no_frames: bool,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), wasm_bindgen::JsValue>> + 'a>> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'a>> {
+    use web_sys::console;
+
     Box::pin(async move {
         match node.data {
             NodeData::Document => {
@@ -456,7 +458,7 @@ pub fn walk_and_embed_assets<'a>(
                         opt_insecure,
                         opt_no_frames,
                     )
-                    .await?;
+                    .await;
                 }
             }
             NodeData::Element {
@@ -491,7 +493,7 @@ pub fn walk_and_embed_assets<'a>(
                                         let href_full_url: String =
                                             resolve_url(&url, &attr.value.to_string())
                                                 .unwrap_or(EMPTY_STRING.clone());
-                                        let (favicon_dataurl, _) = retrieve_asset(
+                                        let favicon_dataurl = match retrieve_asset(
                                             cache,
                                             &href_full_url,
                                             true,
@@ -499,8 +501,13 @@ pub fn walk_and_embed_assets<'a>(
                                             opt_user_agent,
                                             opt_silent,
                                             opt_insecure,
-                                        )
-                                        .await?;
+                                        ).await {
+                                            Ok((u, _)) => u,
+                                            Err(err) => {
+                                                console::error_2(&format!("Could not fetch {}", &href_full_url).into(), &err);
+                                                "".to_string()
+                                            }
+                                        };
                                         attr.value.clear();
                                         attr.value.push_slice(favicon_dataurl.as_str());
                                     }
@@ -515,7 +522,7 @@ pub fn walk_and_embed_assets<'a>(
                                         let href_full_url: String =
                                             resolve_url(&url, &attr.value.to_string())
                                                 .unwrap_or(EMPTY_STRING.clone());
-                                        let (css_dataurl, _) = retrieve_asset(
+                                        let css_dataurl = match retrieve_asset(
                                             cache,
                                             &href_full_url,
                                             true,
@@ -524,7 +531,13 @@ pub fn walk_and_embed_assets<'a>(
                                             opt_silent,
                                             opt_insecure,
                                         )
-                                        .await?;
+                                        .await {
+                                            Ok((u, _)) => u,
+                                            Err(err) => {
+                                                console::error_2(&format!("Could not fetch {}", &href_full_url).into(), &err);
+                                                "".to_string()
+                                            },
+                                        };
                                         attr.value.clear();
                                         attr.value.push_slice(css_dataurl.as_str());
                                     }
@@ -558,7 +571,7 @@ pub fn walk_and_embed_assets<'a>(
                                 } else {
                                     let src_full_url: String =
                                         resolve_url(&url, &value).unwrap_or(EMPTY_STRING.clone());
-                                    let (img_dataurl, _) = retrieve_asset(
+                                    let img_dataurl = match retrieve_asset(
                                         cache,
                                         &src_full_url,
                                         true,
@@ -567,7 +580,13 @@ pub fn walk_and_embed_assets<'a>(
                                         opt_silent,
                                         opt_insecure,
                                     )
-                                    .await?;
+                                    .await {
+                                        Ok((u, _)) => u,
+                                        Err(err) => {
+                                            console::error_2(&format!("Could not fetch {}", &src_full_url).into(), &err);
+                                            "".to_string()
+                                        }
+                                    };
                                     attr.value.clear();
                                     attr.value.push_slice(img_dataurl.as_str());
                                 }
@@ -592,7 +611,7 @@ pub fn walk_and_embed_assets<'a>(
                                         let srcset_full_url: String =
                                             resolve_url(&url, &attr.value.to_string())
                                                 .unwrap_or(EMPTY_STRING.clone());
-                                        let (source_dataurl, _) = retrieve_asset(
+                                        let source_dataurl = match retrieve_asset(
                                             cache,
                                             &srcset_full_url,
                                             true,
@@ -601,7 +620,13 @@ pub fn walk_and_embed_assets<'a>(
                                             opt_silent,
                                             opt_insecure,
                                         )
-                                        .await?;
+                                        .await {
+                                            Ok((u, _)) => u,
+                                            Err(err) => {
+                                                console::error_2(&format!("Could not fetch {}", &srcset_full_url).into(), &err);
+                                                "".to_string()
+                                            }
+                                        };
                                         attr.value.clear();
                                         attr.value.push_slice(source_dataurl.as_str());
                                     }
@@ -639,7 +664,7 @@ pub fn walk_and_embed_assets<'a>(
                                     let src_full_url: String =
                                         resolve_url(&url, &attr.value.to_string())
                                             .unwrap_or(EMPTY_STRING.clone());
-                                    let (js_dataurl, _) = retrieve_asset(
+                                    let js_dataurl = match retrieve_asset(
                                         cache,
                                         &src_full_url,
                                         true,
@@ -648,7 +673,13 @@ pub fn walk_and_embed_assets<'a>(
                                         opt_silent,
                                         opt_insecure,
                                     )
-                                    .await?;
+                                    .await {
+                                        Ok((u, _)) => u,
+                                        Err(err) => {
+                                            console::error_2(&format!("Could not fetch {}", &src_full_url).into(), &err);
+                                            "".to_string()
+                                        }
+                                    };
                                     attr.value.clear();
                                     attr.value.push_slice(js_dataurl.as_str());
                                 }
@@ -693,7 +724,7 @@ pub fn walk_and_embed_assets<'a>(
 
                                 let src_full_url: String =
                                     resolve_url(&url, &iframe_src).unwrap_or(EMPTY_STRING.clone());
-                                let (iframe_data, iframe_final_url) = retrieve_asset(
+                                let (iframe_data, iframe_final_url) = match retrieve_asset(
                                     cache,
                                     &src_full_url,
                                     false,
@@ -702,7 +733,13 @@ pub fn walk_and_embed_assets<'a>(
                                     opt_silent,
                                     opt_insecure,
                                 )
-                                .await?;
+                                .await {
+                                    Ok(ret) => ret,
+                                    Err(err) => {
+                                        console::error_2(&format!("Could not fetch {}", &src_full_url).into(), &err);
+                                        ("".to_string(), src_full_url)
+                                    }
+                                };
                                 let dom = html_to_dom(&iframe_data);
                                 walk_and_embed_assets(
                                     cache,
@@ -716,7 +753,7 @@ pub fn walk_and_embed_assets<'a>(
                                     opt_insecure,
                                     opt_no_frames,
                                 )
-                                .await?;
+                                .await;
                                 let mut buf: Vec<u8> = Vec::new();
                                 serialize(&mut buf, &dom.document, SerializeOpts::default()).unwrap();
                                 let iframe_dataurl = data_to_dataurl("text/html", &buf);
@@ -740,7 +777,7 @@ pub fn walk_and_embed_assets<'a>(
                                 } else {
                                     let poster_full_url: String = resolve_url(&url, &video_poster)
                                         .unwrap_or(EMPTY_STRING.clone());
-                                    let (poster_dataurl, _) = retrieve_asset(
+                                    let poster_dataurl = match retrieve_asset(
                                         cache,
                                         &poster_full_url,
                                         true,
@@ -749,7 +786,13 @@ pub fn walk_and_embed_assets<'a>(
                                         opt_silent,
                                         opt_insecure,
                                     )
-                                    .await?;
+                                    .await {
+                                        Ok((u, _)) => u,
+                                        Err(err) => {
+                                            console::error_2(&format!("Could not fetch {}", &poster_full_url).into(), &err);
+                                            poster_full_url
+                                        }
+                                    };
                                     attr.value.clear();
                                     attr.value.push_slice(poster_dataurl.as_str());
                                 }
@@ -801,7 +844,7 @@ pub fn walk_and_embed_assets<'a>(
                         opt_insecure,
                         opt_no_frames,
                     )
-                    .await?;
+                    .await;
                 }
             }
             _ => {
@@ -811,7 +854,6 @@ pub fn walk_and_embed_assets<'a>(
                 //       by browsers other than IE [5, 9]
             }
         }
-        Ok(())
     })
 }
 

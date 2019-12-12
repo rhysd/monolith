@@ -110,7 +110,7 @@ pub async fn monolith_of_url(url_target: String, options: MonolithOptions) -> Re
         silent,
         insecure,
         no_frames,
-    ).await?;
+    ).await;
 
     let html = stringify_document(
         &dom.document,
@@ -150,7 +150,7 @@ pub async fn monolith_of_html(html: String, final_url: String, options: Monolith
         silent,
         insecure,
         no_frames,
-    ).await?;
+    ).await;
 
     let html = stringify_document(
         &dom.document,
