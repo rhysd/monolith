@@ -281,6 +281,10 @@ export const __wbg_mime_78ba44b1080fb6a5 = function(arg0, arg1) {
     getInt32Memory()[arg0 / 4 + 1] = ret1;
 };
 
+export const __widl_f_error_2_ = function(arg0, arg1) {
+    console.error(getObject(arg0), getObject(arg1));
+};
+
 export const __widl_f_log_1_ = function(arg0) {
     console.log(getObject(arg0));
 };
@@ -332,7 +336,7 @@ export const __wbindgen_throw = function(arg0, arg1) {
     throw new Error(getStringFromWasm(arg0, arg1));
 };
 
-export const __wbindgen_closure_wrapper424 = function(arg0, arg1, arg2) {
+export const __wbindgen_closure_wrapper397 = function(arg0, arg1, arg2) {
     const state = { a: arg0, b: arg1, cnt: 1 };
     const real = (arg0) => {
         state.cnt++;
