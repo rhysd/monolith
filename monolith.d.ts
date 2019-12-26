@@ -44,8 +44,4 @@ export class MonolithOptions {
 * @param {boolean} b 
 */
   silent(b: boolean): void;
-/**
-* @param {string} ua 
-*/
-  userAgent(ua: string): void;
 }
