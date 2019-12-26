@@ -1,19 +1,17 @@
-use crate::http::retrieve_asset;
-use crate::js::attr_is_event_handler;
-use crate::utils::{data_to_dataurl, is_valid_url, resolve_url, url_has_protocol};
 use html5ever::interface::QualName;
 use html5ever::parse_document;
 use html5ever::rcdom::{Handle, NodeData, RcDom};
 use html5ever::serialize::{serialize, SerializeOpts};
-use html5ever::tendril::{format_tendril, TendrilSink};
+use html5ever::tendril::{format_tendril, Tendril, TendrilSink};
 use html5ever::tree_builder::{Attribute, TreeSink};
 use html5ever::{local_name, namespace_url, ns};
+use crate::http::retrieve_asset;
+use crate::js::attr_is_event_handler;
+#[cfg(not(target_arch = "wasm32"))]
+use reqwest::Client;
 use std::collections::HashMap;
 use std::default::Default;
-
-lazy_static! {
-    static ref EMPTY_STRING: String = String::new();
-}
+use crate::utils::{data_to_dataurl, is_valid_url, resolve_css_imports, resolve_url, url_has_protocol};
 
 const ICON_VALUES: [&str; 5] = [
     "icon",
@@ -35,7 +33,7 @@ pub fn get_parent_node(node: &Handle) -> Handle {
 pub fn get_node_name(node: &Handle) -> String {
     match &node.data {
         NodeData::Element { ref name, .. } => name.local.as_ref().to_string(),
-        _ => EMPTY_STRING.clone(),
+        _ => str!(),
     }
 }
 
@@ -46,14 +44,13 @@ pub fn is_icon(attr_value: &str) -> bool {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn walk_and_embed_assets(
     cache: &mut HashMap<String, String>,
+    client: &Client,
     url: &str,
     node: &Handle,
     opt_no_css: bool,
     opt_no_js: bool,
     opt_no_images: bool,
-    opt_user_agent: &str,
     opt_silent: bool,
-    opt_insecure: bool,
     opt_no_frames: bool,
 ) {
     match node.data {
@@ -62,14 +59,13 @@ pub fn walk_and_embed_assets(
             for child in node.children.borrow().iter() {
                 walk_and_embed_assets(
                     cache,
+                    client,
                     &url,
                     child,
                     opt_no_css,
                     opt_no_js,
                     opt_no_images,
-                    opt_user_agent,
                     opt_silent,
-                    opt_insecure,
                     opt_no_frames,
                 );
             }
@@ -105,17 +101,16 @@ pub fn walk_and_embed_assets(
                                 } else {
                                     let href_full_url: String =
                                         resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(EMPTY_STRING.clone());
+                                            .unwrap_or(str!());
                                     let (favicon_dataurl, _) = retrieve_asset(
                                         cache,
+                                        client,
                                         &href_full_url,
                                         true,
                                         "",
-                                        opt_user_agent,
                                         opt_silent,
-                                        opt_insecure,
                                     )
-                                    .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
+                                    .unwrap_or((str!(), str!()));
                                     attr.value.clear();
                                     attr.value.push_slice(favicon_dataurl.as_str());
                                 }
@@ -129,19 +124,37 @@ pub fn walk_and_embed_assets(
                                 } else {
                                     let href_full_url: String =
                                         resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(EMPTY_STRING.clone());
-                                    let (css_dataurl, _) = retrieve_asset(
+                                            .unwrap_or(str!());
+                                    let replacement_text = match retrieve_asset(
                                         cache,
+                                        client,
                                         &href_full_url,
-                                        true,
+                                        false,
                                         "text/css",
-                                        opt_user_agent,
                                         opt_silent,
-                                        opt_insecure,
-                                    )
-                                    .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
+                                    ) {
+                                        // On successful retrieval, traverse CSS
+                                        Ok((css_data, _)) => resolve_css_imports(
+                                            cache,
+                                            client,
+                                            &css_data,
+                                            true,
+                                            &href_full_url,
+                                            opt_no_images,
+                                            opt_silent,
+                                        ),
+
+                                        // If a network error occured, warn
+                                        Err(e) => {
+                                            eprintln!("Warning: {}", e,);
+
+                                            // If failed to resolve, replace with absolute URL
+                                            href_full_url
+                                        }
+                                    };
+
                                     attr.value.clear();
-                                    attr.value.push_slice(css_dataurl.as_str());
+                                    attr.value.push_slice(&replacement_text);
                                 }
                             }
                         }
@@ -149,8 +162,7 @@ pub fn walk_and_embed_assets(
                         for attr in attrs_mut.iter_mut() {
                             if &attr.name.local == "href" {
                                 let href_full_url: String =
-                                    resolve_url(&url, &attr.value.to_string())
-                                        .unwrap_or(EMPTY_STRING.clone());
+                                    resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
                                 attr.value.clear();
                                 attr.value.push_slice(&href_full_url.as_str());
                             }
@@ -158,35 +170,49 @@ pub fn walk_and_embed_assets(
                     }
                 }
                 "img" => {
-                    for attr in attrs_mut.iter_mut() {
-                        if &attr.name.local == "src" {
-                            let value = attr.value.to_string();
-
-                            // Ignore images with empty source
-                            if value == EMPTY_STRING.clone() {
-                                continue;
-                            }
-
-                            if opt_no_images {
-                                attr.value.clear();
-                                attr.value.push_slice(TRANSPARENT_PIXEL);
-                            } else {
-                                let src_full_url: String =
-                                    resolve_url(&url, &value).unwrap_or(EMPTY_STRING.clone());
-                                let (img_dataurl, _) = retrieve_asset(
-                                    cache,
-                                    &src_full_url,
-                                    true,
-                                    "",
-                                    opt_user_agent,
-                                    opt_silent,
-                                    opt_insecure,
-                                )
-                                .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
-                                attr.value.clear();
-                                attr.value.push_slice(img_dataurl.as_str());
-                            }
+                    // Find source tags
+                    let mut found_src: Option<Attribute> = None;
+                    let mut found_datasrc: Option<Attribute> = None;
+                    let mut i = 0;
+                    while i < attrs_mut.len() {
+                        let name = attrs_mut[i].name.local.as_ref();
+                        if name.eq_ignore_ascii_case("src") {
+                            found_src = Some(attrs_mut.remove(i));
+                        } else if name.eq_ignore_ascii_case("data-src") {
+                            found_datasrc = Some(attrs_mut.remove(i));
+                        } else {
+                            i += 1;
                         }
+                    }
+
+                    // If images are disabled, clear both sources
+                    if opt_no_images {
+                        attrs_mut.push(Attribute {
+                            name: QualName::new(None, ns!(), local_name!("src")),
+                            value: Tendril::from_slice(TRANSPARENT_PIXEL),
+                        });
+                    } else if let Some((dataurl, _)) = (&found_datasrc)
+                        .into_iter()
+                        .chain(&found_src) // Give dataurl priority
+                        .map(|attr| &attr.value)
+                        .filter(|src| !src.is_empty()) // Ignore empty srcs
+                        .next()
+                        .and_then(|src| resolve_url(&url, src).ok()) // Make absolute
+                        .and_then(|abs_src| // Download and convert to dataurl
+                            retrieve_asset(
+                                cache,
+                                client,
+                                &abs_src,
+                                true,
+                                "",
+                                opt_silent,
+                            ).ok())
+                    {
+                        // Add the new dataurl src attribute
+                        attrs_mut.push(Attribute {
+                            name: QualName::new(None, ns!(), local_name!("src")),
+                            value: Tendril::from_slice(dataurl.as_ref()),
+                        });
                     }
                 }
                 "source" => {
@@ -206,17 +232,16 @@ pub fn walk_and_embed_assets(
                                 } else {
                                     let srcset_full_url: String =
                                         resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(EMPTY_STRING.clone());
+                                            .unwrap_or(str!());
                                     let (source_dataurl, _) = retrieve_asset(
                                         cache,
+                                        client,
                                         &srcset_full_url,
                                         true,
                                         "",
-                                        opt_user_agent,
                                         opt_silent,
-                                        opt_insecure,
                                     )
-                                    .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
+                                    .unwrap_or((str!(), str!()));
                                     attr.value.clear();
                                     attr.value.push_slice(source_dataurl.as_str());
                                 }
@@ -232,8 +257,8 @@ pub fn walk_and_embed_assets(
                                 continue;
                             }
 
-                            let href_full_url: String = resolve_url(&url, &attr.value.to_string())
-                                .unwrap_or(EMPTY_STRING.clone());
+                            let href_full_url: String =
+                                resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
                             attr.value.clear();
                             attr.value.push_slice(href_full_url.as_str());
                         }
@@ -252,18 +277,16 @@ pub fn walk_and_embed_assets(
                         for attr in attrs_mut.iter_mut() {
                             if &attr.name.local == "src" {
                                 let src_full_url: String =
-                                    resolve_url(&url, &attr.value.to_string())
-                                        .unwrap_or(EMPTY_STRING.clone());
+                                    resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
                                 let (js_dataurl, _) = retrieve_asset(
                                     cache,
+                                    client,
                                     &src_full_url,
                                     true,
                                     "application/javascript",
-                                    opt_user_agent,
                                     opt_silent,
-                                    opt_insecure,
                                 )
-                                .unwrap_or((EMPTY_STRING.clone(), EMPTY_STRING.clone()));
+                                .unwrap_or((str!(), str!()));
                                 attr.value.clear();
                                 attr.value.push_slice(js_dataurl.as_str());
                             }
@@ -274,6 +297,23 @@ pub fn walk_and_embed_assets(
                     if opt_no_css {
                         // Empty inner content of STYLE tags
                         node.children.borrow_mut().clear();
+                    } else {
+                        for node in node.children.borrow_mut().iter_mut() {
+                            if let NodeData::Text { ref contents } = node.data {
+                                let mut tendril = contents.borrow_mut();
+                                let replacement = resolve_css_imports(
+                                    cache,
+                                    client,
+                                    tendril.as_ref(),
+                                    false,
+                                    &url,
+                                    opt_no_images,
+                                    opt_silent,
+                                );
+                                tendril.clear();
+                                tendril.push_slice(&replacement);
+                            }
+                        }
                     }
                 }
                 "form" => {
@@ -282,8 +322,7 @@ pub fn walk_and_embed_assets(
                             // Modify action to be a full URL
                             if !is_valid_url(&attr.value) {
                                 let href_full_url: String =
-                                    resolve_url(&url, &attr.value.to_string())
-                                        .unwrap_or(EMPTY_STRING.clone());
+                                    resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
                                 attr.value.clear();
                                 attr.value.push_slice(href_full_url.as_str());
                             }
@@ -302,33 +341,31 @@ pub fn walk_and_embed_assets(
                             let iframe_src: String = attr.value.to_string();
 
                             // Ignore iframes with empty source (they cause infinite loops)
-                            if iframe_src == EMPTY_STRING.clone() {
+                            if iframe_src == str!() {
                                 continue;
                             }
 
                             let src_full_url: String =
-                                resolve_url(&url, &iframe_src).unwrap_or(EMPTY_STRING.clone());
+                                resolve_url(&url, &iframe_src).unwrap_or(str!());
                             let (iframe_data, iframe_final_url) = retrieve_asset(
                                 cache,
+                                client,
                                 &src_full_url,
                                 false,
                                 "text/html",
-                                opt_user_agent,
                                 opt_silent,
-                                opt_insecure,
                             )
-                            .unwrap_or((EMPTY_STRING.clone(), src_full_url));
+                            .unwrap_or((str!(), src_full_url));
                             let dom = html_to_dom(&iframe_data);
                             walk_and_embed_assets(
                                 cache,
+                                client,
                                 &iframe_final_url,
                                 &dom.document,
                                 opt_no_css,
                                 opt_no_js,
                                 opt_no_images,
-                                opt_user_agent,
                                 opt_silent,
-                                opt_insecure,
                                 opt_no_frames,
                             );
                             let mut buf: Vec<u8> = Vec::new();
@@ -345,25 +382,24 @@ pub fn walk_and_embed_assets(
                             let video_poster = attr.value.to_string();
 
                             // Skip posters with empty source
-                            if video_poster == EMPTY_STRING.clone() {
+                            if video_poster == str!() {
                                 continue;
                             }
 
                             if opt_no_images {
                                 attr.value.clear();
                             } else {
-                                let poster_full_url: String = resolve_url(&url, &video_poster)
-                                    .unwrap_or(EMPTY_STRING.clone());
+                                let poster_full_url: String =
+                                    resolve_url(&url, &video_poster).unwrap_or(str!());
                                 let (poster_dataurl, _) = retrieve_asset(
                                     cache,
+                                    client,
                                     &poster_full_url,
                                     true,
                                     "",
-                                    opt_user_agent,
                                     opt_silent,
-                                    opt_insecure,
                                 )
-                                .unwrap_or((poster_full_url, EMPTY_STRING.clone()));
+                                .unwrap_or((poster_full_url, str!()));
                                 attr.value.clear();
                                 attr.value.push_slice(poster_dataurl.as_str());
                             }
@@ -373,6 +409,7 @@ pub fn walk_and_embed_assets(
                 _ => {}
             }
 
+            // Process style attributes
             if opt_no_css {
                 // Get rid of style attributes
                 let mut style_attr_indexes = Vec::new();
@@ -384,6 +421,24 @@ pub fn walk_and_embed_assets(
                 style_attr_indexes.reverse();
                 for attr_index in style_attr_indexes {
                     attrs_mut.remove(attr_index);
+                }
+            } else {
+                // Otherwise, parse any links found in the attributes
+                for attribute in attrs_mut
+                    .iter_mut()
+                    .filter(|a| a.name.local.as_ref().eq_ignore_ascii_case("style"))
+                {
+                    let replacement = resolve_css_imports(
+                        cache,
+                        client,
+                        attribute.value.as_ref(),
+                        false,
+                        &url,
+                        opt_no_images,
+                        opt_silent,
+                    );
+                    attribute.value.clear();
+                    attribute.value.push_slice(&replacement);
                 }
             }
 
@@ -405,14 +460,13 @@ pub fn walk_and_embed_assets(
             for child in node.children.borrow().iter() {
                 walk_and_embed_assets(
                     cache,
+                    client,
                     &url,
                     child,
                     opt_no_css,
                     opt_no_js,
                     opt_no_images,
-                    opt_user_agent,
                     opt_silent,
-                    opt_insecure,
                     opt_no_frames,
                 );
             }
@@ -434,9 +488,7 @@ pub fn walk_and_embed_assets<'a>(
     opt_no_css: bool,
     opt_no_js: bool,
     opt_no_images: bool,
-    opt_user_agent: &'a str,
     opt_silent: bool,
-    opt_insecure: bool,
     opt_no_frames: bool,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + 'a>> {
     use web_sys::console;
@@ -453,12 +505,9 @@ pub fn walk_and_embed_assets<'a>(
                         opt_no_css,
                         opt_no_js,
                         opt_no_images,
-                        opt_user_agent,
                         opt_silent,
-                        opt_insecure,
                         opt_no_frames,
-                    )
-                    .await;
+                    ).await;
                 }
             }
             NodeData::Element {
@@ -492,22 +541,16 @@ pub fn walk_and_embed_assets<'a>(
                                     } else {
                                         let href_full_url: String =
                                             resolve_url(&url, &attr.value.to_string())
-                                                .unwrap_or(EMPTY_STRING.clone());
-                                        let favicon_dataurl = match retrieve_asset(
+                                                .unwrap_or(str!());
+                                        let (favicon_dataurl, _) = retrieve_asset(
                                             cache,
                                             &href_full_url,
                                             true,
                                             "",
-                                            opt_user_agent,
                                             opt_silent,
-                                            opt_insecure,
-                                        ).await {
-                                            Ok((u, _)) => u,
-                                            Err(err) => {
-                                                console::error_2(&format!("Could not fetch {}", &href_full_url).into(), &err);
-                                                "".to_string()
-                                            }
-                                        };
+                                        )
+                                        .await
+                                        .unwrap_or((str!(), str!()));
                                         attr.value.clear();
                                         attr.value.push_slice(favicon_dataurl.as_str());
                                     }
@@ -521,25 +564,37 @@ pub fn walk_and_embed_assets<'a>(
                                     } else {
                                         let href_full_url: String =
                                             resolve_url(&url, &attr.value.to_string())
-                                                .unwrap_or(EMPTY_STRING.clone());
-                                        let css_dataurl = match retrieve_asset(
+                                                .unwrap_or(str!());
+                                        let replacement_text = match retrieve_asset(
                                             cache,
                                             &href_full_url,
-                                            true,
+                                            false,
                                             "text/css",
-                                            opt_user_agent,
                                             opt_silent,
-                                            opt_insecure,
-                                        )
-                                        .await {
-                                            Ok((u, _)) => u,
-                                            Err(err) => {
-                                                console::error_2(&format!("Could not fetch {}", &href_full_url).into(), &err);
-                                                "".to_string()
-                                            },
+                                        ).await {
+                                            // On successful retrieval, traverse CSS
+                                            Ok((css_data, _)) => resolve_css_imports(
+                                                cache,
+                                                &css_data,
+                                                true,
+                                                &href_full_url,
+                                                opt_no_images,
+                                                opt_silent,
+                                            )
+                                            .await
+                                            .unwrap_or(str!()),
+
+                                            // If a network error occured, warn
+                                            Err(e) => {
+                                                console::error_1(&e);
+
+                                                // If failed to resolve, replace with absolute URL
+                                                href_full_url
+                                            }
                                         };
+
                                         attr.value.clear();
-                                        attr.value.push_slice(css_dataurl.as_str());
+                                        attr.value.push_slice(&replacement_text);
                                     }
                                 }
                             }
@@ -547,8 +602,7 @@ pub fn walk_and_embed_assets<'a>(
                             for attr in attrs_mut.iter_mut() {
                                 if &attr.name.local == "href" {
                                     let href_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(EMPTY_STRING.clone());
+                                        resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
                                     attr.value.clear();
                                     attr.value.push_slice(&href_full_url.as_str());
                                 }
@@ -556,40 +610,49 @@ pub fn walk_and_embed_assets<'a>(
                         }
                     }
                     "img" => {
-                        for attr in attrs_mut.iter_mut() {
-                            if &attr.name.local == "src" {
-                                let value = attr.value.to_string();
+                        // Find source tags
+                        let mut found_src: Option<Attribute> = None;
+                        let mut found_datasrc: Option<Attribute> = None;
+                        let mut i = 0;
+                        while i < attrs_mut.len() {
+                            let name = attrs_mut[i].name.local.as_ref();
+                            if name.eq_ignore_ascii_case("src") {
+                                found_src = Some(attrs_mut.remove(i));
+                            } else if name.eq_ignore_ascii_case("data-src") {
+                                found_datasrc = Some(attrs_mut.remove(i));
+                            } else {
+                                i += 1;
+                            }
+                        }
 
-                                // Ignore images with empty source
-                                if value == EMPTY_STRING.clone() {
-                                    continue;
-                                }
-
-                                if opt_no_images {
-                                    attr.value.clear();
-                                    attr.value.push_slice(TRANSPARENT_PIXEL);
-                                } else {
-                                    let src_full_url: String =
-                                        resolve_url(&url, &value).unwrap_or(EMPTY_STRING.clone());
-                                    let img_dataurl = match retrieve_asset(
-                                        cache,
-                                        &src_full_url,
-                                        true,
-                                        "",
-                                        opt_user_agent,
-                                        opt_silent,
-                                        opt_insecure,
-                                    )
-                                    .await {
-                                        Ok((u, _)) => u,
-                                        Err(err) => {
-                                            console::error_2(&format!("Could not fetch {}", &src_full_url).into(), &err);
-                                            "".to_string()
-                                        }
-                                    };
-                                    attr.value.clear();
-                                    attr.value.push_slice(img_dataurl.as_str());
-                                }
+                        // If images are disabled, clear both sources
+                        if opt_no_images {
+                            attrs_mut.push(Attribute {
+                                name: QualName::new(None, ns!(), local_name!("src")),
+                                value: Tendril::from_slice(TRANSPARENT_PIXEL),
+                            });
+                        } else if let Some(abs_src) = (&found_datasrc)
+                            .into_iter()
+                            .chain(&found_src) // Give dataurl priority
+                            .map(|attr| &attr.value)
+                            .filter(|src| !src.is_empty()) // Ignore empty srcs
+                            .next()
+                            .and_then(|src| resolve_url(&url, src).ok()) // Make absolute
+                        {
+                            // Download and convert to dataurl
+                            if let Some((dataurl, _)) = retrieve_asset(
+                                    cache,
+                                    &abs_src,
+                                    true,
+                                    "",
+                                    opt_silent,
+                                ).await.ok()
+                            {
+                                // Add the new dataurl src attribute
+                                attrs_mut.push(Attribute {
+                                    name: QualName::new(None, ns!(), local_name!("src")),
+                                    value: Tendril::from_slice(dataurl.as_ref()),
+                                });
                             }
                         }
                     }
@@ -610,23 +673,16 @@ pub fn walk_and_embed_assets<'a>(
                                     } else {
                                         let srcset_full_url: String =
                                             resolve_url(&url, &attr.value.to_string())
-                                                .unwrap_or(EMPTY_STRING.clone());
-                                        let source_dataurl = match retrieve_asset(
+                                                .unwrap_or(str!());
+                                        let (source_dataurl, _) = retrieve_asset(
                                             cache,
                                             &srcset_full_url,
                                             true,
                                             "",
-                                            opt_user_agent,
                                             opt_silent,
-                                            opt_insecure,
                                         )
-                                        .await {
-                                            Ok((u, _)) => u,
-                                            Err(err) => {
-                                                console::error_2(&format!("Could not fetch {}", &srcset_full_url).into(), &err);
-                                                "".to_string()
-                                            }
-                                        };
+                                        .await
+                                        .unwrap_or((str!(), str!()));
                                         attr.value.clear();
                                         attr.value.push_slice(source_dataurl.as_str());
                                     }
@@ -642,8 +698,8 @@ pub fn walk_and_embed_assets<'a>(
                                     continue;
                                 }
 
-                                let href_full_url: String = resolve_url(&url, &attr.value.to_string())
-                                    .unwrap_or(EMPTY_STRING.clone());
+                                let href_full_url: String =
+                                    resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
                                 attr.value.clear();
                                 attr.value.push_slice(href_full_url.as_str());
                             }
@@ -662,24 +718,16 @@ pub fn walk_and_embed_assets<'a>(
                             for attr in attrs_mut.iter_mut() {
                                 if &attr.name.local == "src" {
                                     let src_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(EMPTY_STRING.clone());
-                                    let js_dataurl = match retrieve_asset(
+                                        resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
+                                    let (js_dataurl, _) = retrieve_asset(
                                         cache,
                                         &src_full_url,
                                         true,
                                         "application/javascript",
-                                        opt_user_agent,
                                         opt_silent,
-                                        opt_insecure,
                                     )
-                                    .await {
-                                        Ok((u, _)) => u,
-                                        Err(err) => {
-                                            console::error_2(&format!("Could not fetch {}", &src_full_url).into(), &err);
-                                            "".to_string()
-                                        }
-                                    };
+                                    .await
+                                    .unwrap_or((str!(), str!()));
                                     attr.value.clear();
                                     attr.value.push_slice(js_dataurl.as_str());
                                 }
@@ -690,6 +738,24 @@ pub fn walk_and_embed_assets<'a>(
                         if opt_no_css {
                             // Empty inner content of STYLE tags
                             node.children.borrow_mut().clear();
+                        } else {
+                            for node in node.children.borrow_mut().iter_mut() {
+                                if let NodeData::Text { ref contents } = node.data {
+                                    let mut tendril = contents.borrow_mut();
+                                    let replacement = resolve_css_imports(
+                                        cache,
+                                        tendril.as_ref(),
+                                        false,
+                                        &url,
+                                        opt_no_images,
+                                        opt_silent,
+                                    )
+                                    .await
+                                    .unwrap_or(str!());
+                                    tendril.clear();
+                                    tendril.push_slice(&replacement);
+                                }
+                            }
                         }
                     }
                     "form" => {
@@ -698,8 +764,7 @@ pub fn walk_and_embed_assets<'a>(
                                 // Modify action to be a full URL
                                 if !is_valid_url(&attr.value) {
                                     let href_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(EMPTY_STRING.clone());
+                                        resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
                                     attr.value.clear();
                                     attr.value.push_slice(href_full_url.as_str());
                                 }
@@ -718,28 +783,21 @@ pub fn walk_and_embed_assets<'a>(
                                 let iframe_src: String = attr.value.to_string();
 
                                 // Ignore iframes with empty source (they cause infinite loops)
-                                if iframe_src == EMPTY_STRING.clone() {
+                                if iframe_src == str!() {
                                     continue;
                                 }
 
                                 let src_full_url: String =
-                                    resolve_url(&url, &iframe_src).unwrap_or(EMPTY_STRING.clone());
-                                let (iframe_data, iframe_final_url) = match retrieve_asset(
+                                    resolve_url(&url, &iframe_src).unwrap_or(str!());
+                                let (iframe_data, iframe_final_url) = retrieve_asset(
                                     cache,
                                     &src_full_url,
                                     false,
                                     "text/html",
-                                    opt_user_agent,
                                     opt_silent,
-                                    opt_insecure,
                                 )
-                                .await {
-                                    Ok(ret) => ret,
-                                    Err(err) => {
-                                        console::error_2(&format!("Could not fetch {}", &src_full_url).into(), &err);
-                                        ("".to_string(), src_full_url)
-                                    }
-                                };
+                                .await
+                                .unwrap_or((str!(), src_full_url));
                                 let dom = html_to_dom(&iframe_data);
                                 walk_and_embed_assets(
                                     cache,
@@ -748,12 +806,9 @@ pub fn walk_and_embed_assets<'a>(
                                     opt_no_css,
                                     opt_no_js,
                                     opt_no_images,
-                                    opt_user_agent,
                                     opt_silent,
-                                    opt_insecure,
                                     opt_no_frames,
-                                )
-                                .await;
+                                ).await;
                                 let mut buf: Vec<u8> = Vec::new();
                                 serialize(&mut buf, &dom.document, SerializeOpts::default()).unwrap();
                                 let iframe_dataurl = data_to_dataurl("text/html", &buf);
@@ -768,31 +823,24 @@ pub fn walk_and_embed_assets<'a>(
                                 let video_poster = attr.value.to_string();
 
                                 // Skip posters with empty source
-                                if video_poster == EMPTY_STRING.clone() {
+                                if video_poster == str!() {
                                     continue;
                                 }
 
                                 if opt_no_images {
                                     attr.value.clear();
                                 } else {
-                                    let poster_full_url: String = resolve_url(&url, &video_poster)
-                                        .unwrap_or(EMPTY_STRING.clone());
-                                    let poster_dataurl = match retrieve_asset(
+                                    let poster_full_url: String =
+                                        resolve_url(&url, &video_poster).unwrap_or(str!());
+                                    let (poster_dataurl, _) = retrieve_asset(
                                         cache,
                                         &poster_full_url,
                                         true,
                                         "",
-                                        opt_user_agent,
                                         opt_silent,
-                                        opt_insecure,
                                     )
-                                    .await {
-                                        Ok((u, _)) => u,
-                                        Err(err) => {
-                                            console::error_2(&format!("Could not fetch {}", &poster_full_url).into(), &err);
-                                            poster_full_url
-                                        }
-                                    };
+                                    .await
+                                    .unwrap_or((poster_full_url, str!()));
                                     attr.value.clear();
                                     attr.value.push_slice(poster_dataurl.as_str());
                                 }
@@ -802,6 +850,7 @@ pub fn walk_and_embed_assets<'a>(
                     _ => {}
                 }
 
+                // Process style attributes
                 if opt_no_css {
                     // Get rid of style attributes
                     let mut style_attr_indexes = Vec::new();
@@ -813,6 +862,25 @@ pub fn walk_and_embed_assets<'a>(
                     style_attr_indexes.reverse();
                     for attr_index in style_attr_indexes {
                         attrs_mut.remove(attr_index);
+                    }
+                } else {
+                    // Otherwise, parse any links found in the attributes
+                    for attribute in attrs_mut
+                        .iter_mut()
+                        .filter(|a| a.name.local.as_ref().eq_ignore_ascii_case("style"))
+                    {
+                        let replacement = resolve_css_imports(
+                            cache,
+                            attribute.value.as_ref(),
+                            false,
+                            &url,
+                            opt_no_images,
+                            opt_silent,
+                        )
+                        .await
+                        .unwrap_or(str!());
+                        attribute.value.clear();
+                        attribute.value.push_slice(&replacement);
                     }
                 }
 
@@ -839,12 +907,9 @@ pub fn walk_and_embed_assets<'a>(
                         opt_no_css,
                         opt_no_js,
                         opt_no_images,
-                        opt_user_agent,
                         opt_silent,
-                        opt_insecure,
                         opt_no_frames,
-                    )
-                    .await;
+                    ).await;
                 }
             }
             _ => {
@@ -898,7 +963,7 @@ pub fn stringify_document(
         let doc = dom.get_document();
         let html = get_child_node_by_name(&doc, "html");
         let head = get_child_node_by_name(&html, "head");
-        let mut content_attr = EMPTY_STRING.clone();
+        let mut content_attr = str!();
         if opt_isolate {
             content_attr += " default-src 'unsafe-inline' data:;";
         }

@@ -11,10 +11,8 @@ pub struct MonolithOptions {
     no_frames: bool,
     no_images: bool,
     no_js: bool,
-    insecure: bool,
     isolate: bool,
     silent: bool,
-    user_agent: String,
 }
 
 #[wasm_bindgen]
@@ -25,10 +23,8 @@ impl MonolithOptions {
             no_frames: false,
             no_images: false,
             no_js: false,
-            insecure: false,
             isolate: false,
             silent: false,
-            user_agent: "".to_string(),
         }
     }
 
@@ -59,11 +55,6 @@ impl MonolithOptions {
     pub fn silent(&mut self, b: bool) {
         self.silent = b;
     }
-
-    #[wasm_bindgen(js_name = userAgent)]
-    pub fn user_agent(&mut self, ua: String) {
-        self.user_agent = ua;
-    }
 }
 
 
@@ -80,10 +71,8 @@ pub async fn monolith_of_url(url_target: String, options: MonolithOptions) -> Re
         no_frames,
         no_images,
         no_js,
-        insecure,
         isolate,
         silent,
-        user_agent,
     } = options;
 
     let cache = &mut HashMap::new();
@@ -92,9 +81,7 @@ pub async fn monolith_of_url(url_target: String, options: MonolithOptions) -> Re
         url_target.as_str(),
         false,
         "",
-        user_agent.as_str(),
         silent,
-        insecure,
     )
     .await?;
     let dom = html_to_dom(&data);
@@ -106,9 +93,7 @@ pub async fn monolith_of_url(url_target: String, options: MonolithOptions) -> Re
         no_css,
         no_js,
         no_images,
-        user_agent.as_str(),
         silent,
-        insecure,
         no_frames,
     ).await;
 
@@ -131,10 +116,8 @@ pub async fn monolith_of_html(html: String, final_url: String, options: Monolith
         no_frames,
         no_images,
         no_js,
-        insecure,
         isolate,
         silent,
-        user_agent,
     } = options;
     let cache = &mut HashMap::new();
     let dom = html_to_dom(&html);
@@ -146,9 +129,7 @@ pub async fn monolith_of_html(html: String, final_url: String, options: Monolith
         no_css,
         no_js,
         no_images,
-        user_agent.as_str(),
         silent,
-        insecure,
         no_frames,
     ).await;
 

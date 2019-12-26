@@ -1,45 +1,44 @@
+#[cfg(not(target_arch = "wasm32"))]
+use reqwest::header::CONTENT_TYPE;
+#[cfg(not(target_arch = "wasm32"))]
+use reqwest::Client;
 use std::collections::HashMap;
-use crate::utils::{data_to_dataurl, is_data_url};
+use crate::utils::{clean_url, data_to_dataurl, is_data_url};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn retrieve_asset(
     cache: &mut HashMap<String, String>,
+    client: &Client,
     url: &str,
     as_dataurl: bool,
     mime: &str,
-    opt_user_agent: &str,
     opt_silent: bool,
-    opt_insecure: bool,
 ) -> Result<(String, String), reqwest::Error> {
-    use reqwest::header::{CONTENT_TYPE, USER_AGENT};
-    use reqwest::Client;
-    use std::time::Duration;
+    let cache_key = clean_url(&url);
 
     if is_data_url(&url).unwrap() {
         Ok((url.to_string(), url.to_string()))
     } else {
-        if cache.contains_key(&url.to_string()) {
+        if cache.contains_key(&cache_key) {
             // url is in cache
             if !opt_silent {
-                eprintln!("[ {} ] (from cache)", &url);
+                eprintln!("{} (from cache)", &url);
             }
-            let data = cache.get(&url.to_string()).unwrap();
+            let data = cache.get(&cache_key).unwrap();
             Ok((data.to_string(), url.to_string()))
         } else {
             // url not in cache, we request it
-            let client = Client::builder()
-                .timeout(Duration::from_secs(10))
-                .danger_accept_invalid_certs(opt_insecure)
-                .build()?;
-            let mut response = client.get(url).header(USER_AGENT, opt_user_agent).send()?;
+            let mut response = client.get(url).send()?;
 
             if !opt_silent {
                 if url == response.url().as_str() {
-                    eprintln!("[ {} ]", &url);
+                    eprintln!("{}", &url);
                 } else {
-                    eprintln!("[ {} -> {} ]", &url, &response.url().as_str());
+                    eprintln!("{} -> {}", &url, &response.url().as_str());
                 }
             }
+
+            let new_cache_key = clean_url(response.url().to_string());
 
             if as_dataurl {
                 // Convert response into a byte array
@@ -58,12 +57,12 @@ pub fn retrieve_asset(
                 };
                 let dataurl = data_to_dataurl(&mimetype, &data);
                 // insert in cache
-                cache.insert(response.url().to_string(), dataurl.to_string());
+                cache.insert(new_cache_key, dataurl.to_string());
                 Ok((dataurl, response.url().to_string()))
             } else {
                 let content = response.text().unwrap();
                 // insert in cache
-                cache.insert(response.url().to_string(), content.clone());
+                cache.insert(new_cache_key, content.clone());
                 Ok((content, response.url().to_string()))
             }
         }
@@ -86,7 +85,7 @@ extern "C" {
     #[wasm_bindgen(method, getter)]
     fn url(this: &FetchedData) -> String;
     #[wasm_bindgen(js_name = fetchData)]
-    fn fetch_data(url: &str, user_agent: &str, wantBinary: bool) -> js_sys::Promise;
+    fn fetch_data(url: &str, wantBinary: bool) -> js_sys::Promise;
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -95,9 +94,7 @@ pub async fn retrieve_asset(
     url: &str,
     as_dataurl: bool,
     mime: &str,
-    opt_user_agent: &str,
     opt_silent: bool,
-    _opt_insecure: bool,
 ) -> Result<(String, String), wasm_bindgen::JsValue> {
     use wasm_bindgen_futures::JsFuture;
     use wasm_bindgen::JsCast;
@@ -115,7 +112,7 @@ pub async fn retrieve_asset(
         Ok((data.clone(), url_str))
     } else {
         // url not in cache, we request it
-        let fetched: FetchedData = JsFuture::from(fetch_data(&url_str, opt_user_agent, as_dataurl)).await?.dyn_into()?;
+        let fetched: FetchedData = JsFuture::from(fetch_data(&url_str, as_dataurl)).await?.dyn_into()?;
 
         let res_url = fetched.url();
         if !opt_silent {
