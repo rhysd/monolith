@@ -8,7 +8,7 @@
     "Emi Simpson <emi@alchemi.dev>"
   ],
   "description": "CLI tool for saving web pages as a single HTML file",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "files": [
     "monolith_bg.wasm",
     "monolith.js",
