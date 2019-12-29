@@ -88,40 +88,16 @@ pub fn detect_mimetype(data: &[u8]) -> String {
     "".to_owned()
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn url_has_protocol<T: AsRef<str>>(url: T) -> bool {
     HAS_PROTOCOL.is_match(url.as_ref().to_lowercase().as_str())
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn url_has_protocol<T: AsRef<str>>(path: T) -> bool {
-    let mut saw_digit = false;
-    for c in path.as_ref().chars() {
-        if c.is_ascii_digit() {
-            saw_digit = true;
-            continue;
-        } else if c == ':' {
-            return saw_digit;
-        } else {
-            return false;
-        }
-    }
-    return false;
 }
 
 pub fn is_data_url<T: AsRef<str>>(url: T) -> Result<bool, ParseError> {
     Url::parse(url.as_ref()).and_then(|u| Ok(u.scheme() == "data"))
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn is_valid_url<T: AsRef<str>>(path: T) -> bool {
     REGEX_URL.is_match(path.as_ref())
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn is_valid_url<T: AsRef<str>>(path: T) -> bool {
-    let path = path.as_ref();
-    path.starts_with("http://") || path.starts_with("https://")
 }
 
 pub fn resolve_url<T: AsRef<str>, U: AsRef<str>>(from: T, to: U) -> Result<String, ParseError> {
