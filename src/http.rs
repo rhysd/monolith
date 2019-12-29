@@ -103,40 +103,45 @@ pub async fn retrieve_asset(
     let url_str = url.to_string();
     if is_data_url(&url).unwrap() {
         Ok((url_str.clone(), url_str))
-    } else if cache.contains_key(&url_str) {
-        // url is in cache
-        if !opt_silent {
-            console::log_1(&JsValue::from(format!("Cache hit: {}", &url_str)));
-        }
-        let data = cache.get(&url_str).unwrap();
-        Ok((data.clone(), url_str))
     } else {
-        // url not in cache, we request it
-        let fetched: FetchedData = JsFuture::from(fetch_data(&url_str, as_dataurl)).await?.dyn_into()?;
-
-        let res_url = fetched.url();
-        if !opt_silent {
-            if url_str == res_url {
-                console::log_1(&JsValue::from(format!("Retrieve: {}", &url_str)));
-            } else {
-                console::log_1(&JsValue::from(format!("Retrieve: {} -> {}", &url_str, &res_url)));
+        let cache_key = clean_url(&url);
+        if cache.contains_key(&cache_key) {
+            // url is in cache
+            if !opt_silent {
+                console::log_1(&JsValue::from(format!("Cache hit: {}", &url_str)));
             }
-        }
-
-        if as_dataurl {
-            let data = fetched.data();
-            let mimetype = if mime.is_empty() {
-                fetched.mime()
-            } else {
-                mime.to_string()
-            };
-            let dataurl = data_to_dataurl(&mimetype, &data);
-            cache.insert(res_url.clone(), dataurl.clone());
-            Ok((dataurl, res_url))
+            let data = cache.get(&cache_key).unwrap();
+            Ok((data.clone(), url_str))
         } else {
-            let content = fetched.text();
-            cache.insert(res_url.clone(), content.clone());
-            Ok((content, res_url))
+            // url not in cache, we request it
+            let fetched: FetchedData = JsFuture::from(fetch_data(&url_str, as_dataurl)).await?.dyn_into()?;
+
+            let res_url = fetched.url();
+            if !opt_silent {
+                if url_str == res_url {
+                    console::log_1(&JsValue::from(format!("Retrieve: {}", &url_str)));
+                } else {
+                    console::log_1(&JsValue::from(format!("Retrieve: {} -> {}", &url_str, &res_url)));
+                }
+            }
+
+            let new_cache_key = clean_url(&res_url);
+
+            if as_dataurl {
+                let data = fetched.data();
+                let mimetype = if mime.is_empty() {
+                    fetched.mime()
+                } else {
+                    mime.to_string()
+                };
+                let dataurl = data_to_dataurl(&mimetype, &data);
+                cache.insert(new_cache_key, dataurl.clone());
+                Ok((dataurl, res_url))
+            } else {
+                let content = fetched.text();
+                cache.insert(new_cache_key, content.clone());
+                Ok((content, res_url))
+            }
         }
     }
 }
