@@ -36,6 +36,9 @@ git switch wasm-release
 
 srcs=(monolith.d.ts monolith.js monolith_bg.d.ts monolith_bg.wasm package.json LICENSE snippets/)
 for src in "${srcs[@]}"; do
+    rm -rf "./$src"
+done
+for src in "${srcs[@]}"; do
     cp -R "pkg/$src" "$src"
 done
 
