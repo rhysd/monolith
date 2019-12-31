@@ -330,7 +330,7 @@ export const __wbindgen_throw = function(arg0, arg1) {
     throw new Error(getStringFromWasm(arg0, arg1));
 };
 
-export const __wbindgen_closure_wrapper309 = function(arg0, arg1, arg2) {
+export const __wbindgen_closure_wrapper308 = function(arg0, arg1, arg2) {
     const state = { a: arg0, b: arg1, cnt: 1 };
     const real = (arg0) => {
         state.cnt++;
