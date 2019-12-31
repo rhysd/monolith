@@ -103,6 +103,8 @@ pub fn is_valid_url<T: AsRef<str>>(path: T) -> bool {
 pub fn resolve_url<T: AsRef<str>, U: AsRef<str>>(from: T, to: U) -> Result<String, ParseError> {
     let result = if is_valid_url(to.as_ref()) {
         to.as_ref().to_string()
+    } else if !is_valid_url(from.as_ref()) {
+        "".to_string() // e.g. chrome-extension:// should be filtered here
     } else {
         Url::parse(from.as_ref())?
             .join(to.as_ref())?

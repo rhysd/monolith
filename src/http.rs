@@ -101,7 +101,9 @@ pub async fn retrieve_asset(
     use web_sys::console;
 
     let url_str = url.to_string();
-    if is_data_url(&url).unwrap() {
+    if url_str.is_empty() {
+        Ok(("".to_string(), "".to_string()))
+    } else if is_data_url(&url).unwrap() {
         Ok((url_str.clone(), url_str))
     } else {
         let cache_key = clean_url(&url);
