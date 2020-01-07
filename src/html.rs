@@ -1,3 +1,8 @@
+use crate::http::retrieve_asset;
+use crate::js::attr_is_event_handler;
+use crate::utils::{
+    data_to_dataurl, is_valid_url, resolve_css_imports, resolve_url, url_has_protocol,
+};
 use html5ever::interface::QualName;
 use html5ever::parse_document;
 use html5ever::rcdom::{Handle, NodeData, RcDom};
@@ -5,15 +10,12 @@ use html5ever::serialize::{serialize, SerializeOpts};
 use html5ever::tendril::{format_tendril, Tendril, TendrilSink};
 use html5ever::tree_builder::{Attribute, TreeSink};
 use html5ever::{local_name, namespace_url, ns};
-use crate::http::retrieve_asset;
-use crate::js::attr_is_event_handler;
 #[cfg(not(target_arch = "wasm32"))]
 use reqwest::Client;
 use std::collections::HashMap;
 use std::default::Default;
-use crate::utils::{data_to_dataurl, is_valid_url, resolve_css_imports, resolve_url, url_has_protocol};
 
-const ICON_VALUES: [&str; 5] = [
+const ICON_VALUES: &[&str] = &[
     "icon",
     "shortcut icon",
     "mask-icon",
@@ -30,15 +32,18 @@ pub fn get_parent_node(node: &Handle) -> Handle {
     parent.and_then(|node| node.upgrade()).unwrap()
 }
 
-pub fn get_node_name(node: &Handle) -> String {
+pub fn get_node_name(node: &Handle) -> &'_ str {
     match &node.data {
-        NodeData::Element { ref name, .. } => name.local.as_ref().to_string(),
-        _ => str!(),
+        NodeData::Element { ref name, .. } => name.local.as_ref(),
+        _ => "",
     }
 }
 
 pub fn is_icon(attr_value: &str) -> bool {
-    ICON_VALUES.contains(&&*attr_value.to_lowercase())
+    ICON_VALUES
+        .iter()
+        .find(|a| attr_value.eq_ignore_ascii_case(a))
+        .is_some()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -94,10 +99,10 @@ pub fn walk_and_embed_assets(
 
                     for attr in attrs_mut.iter_mut() {
                         if &attr.name.local == "rel" {
-                            if is_icon(&attr.value.to_string()) {
+                            if is_icon(attr.value.as_ref()) {
                                 link_type = "icon";
                                 break;
-                            } else if attr.value.to_string() == "stylesheet" {
+                            } else if attr.value.as_ref() == "stylesheet" {
                                 link_type = "stylesheet";
                                 break;
                             }
@@ -110,9 +115,8 @@ pub fn walk_and_embed_assets(
                                 if opt_no_images {
                                     attr.value.clear();
                                 } else {
-                                    let href_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(str!());
+                                    let href_full_url =
+                                        resolve_url(&url, attr.value.as_ref()).unwrap_or_default();
                                     let (favicon_dataurl, _) = retrieve_asset(
                                         cache,
                                         client,
@@ -121,7 +125,7 @@ pub fn walk_and_embed_assets(
                                         "",
                                         opt_silent,
                                     )
-                                    .unwrap_or((str!(), str!()));
+                                    .unwrap_or_default();
                                     attr.value.clear();
                                     attr.value.push_slice(favicon_dataurl.as_str());
                                 }
@@ -133,9 +137,8 @@ pub fn walk_and_embed_assets(
                                 if opt_no_css {
                                     attr.value.clear();
                                 } else {
-                                    let href_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(str!());
+                                    let href_full_url =
+                                        resolve_url(&url, &attr.value.as_ref()).unwrap_or_default();
                                     let replacement_text = match retrieve_asset(
                                         cache,
                                         client,
@@ -157,7 +160,7 @@ pub fn walk_and_embed_assets(
 
                                         // If a network error occured, warn
                                         Err(e) => {
-                                            eprintln!("Warning: {}", e,);
+                                            eprintln!("Warning: {}", e);
 
                                             // If failed to resolve, replace with absolute URL
                                             href_full_url
@@ -172,8 +175,8 @@ pub fn walk_and_embed_assets(
                     } else {
                         for attr in attrs_mut.iter_mut() {
                             if &attr.name.local == "href" {
-                                let href_full_url: String =
-                                    resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
+                                let href_full_url =
+                                    resolve_url(&url, attr.value.as_ref()).unwrap_or_default();
                                 attr.value.clear();
                                 attr.value.push_slice(&href_full_url.as_str());
                             }
@@ -231,8 +234,8 @@ pub fn walk_and_embed_assets(
                         let attr_name: &str = &attr.name.local;
 
                         if attr_name == "src" {
-                            let src_full_url: String = resolve_url(&url, &attr.value.to_string())
-                                .unwrap_or(attr.value.to_string());
+                            let src_full_url = resolve_url(&url, attr.value.as_ref())
+                                .unwrap_or_else(|_| attr.value.to_string());
                             attr.value.clear();
                             attr.value.push_slice(src_full_url.as_str());
                         } else if attr_name == "srcset" {
@@ -241,9 +244,8 @@ pub fn walk_and_embed_assets(
                                     attr.value.clear();
                                     attr.value.push_slice(TRANSPARENT_PIXEL);
                                 } else {
-                                    let srcset_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(str!());
+                                    let srcset_full_url =
+                                        resolve_url(&url, attr.value.as_ref()).unwrap_or_default();
                                     let (source_dataurl, _) = retrieve_asset(
                                         cache,
                                         client,
@@ -268,8 +270,8 @@ pub fn walk_and_embed_assets(
                                 continue;
                             }
 
-                            let href_full_url: String =
-                                resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
+                            let href_full_url =
+                                resolve_url(&url, attr.value.as_ref()).unwrap_or_default();
                             attr.value.clear();
                             attr.value.push_slice(href_full_url.as_str());
                         }
@@ -298,8 +300,8 @@ pub fn walk_and_embed_assets(
                     } else {
                         for attr in attrs_mut.iter_mut() {
                             if &attr.name.local == "src" {
-                                let src_full_url: String =
-                                    resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
+                                let src_full_url =
+                                    resolve_url(&url, attr.value.as_ref()).unwrap_or_default();
                                 let (js_dataurl, _) = retrieve_asset(
                                     cache,
                                     client,
@@ -343,8 +345,8 @@ pub fn walk_and_embed_assets(
                         if &attr.name.local == "action" {
                             // Modify action to be a full URL
                             if !is_valid_url(&attr.value) {
-                                let href_full_url: String =
-                                    resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
+                                let href_full_url =
+                                    resolve_url(&url, attr.value.as_ref()).unwrap_or_default();
                                 attr.value.clear();
                                 attr.value.push_slice(href_full_url.as_str());
                             }
@@ -360,15 +362,14 @@ pub fn walk_and_embed_assets(
                                 continue;
                             }
 
-                            let iframe_src: String = attr.value.to_string();
+                            let iframe_src = attr.value.as_ref();
 
                             // Ignore iframes with empty source (they cause infinite loops)
-                            if iframe_src == str!() {
+                            if iframe_src.is_empty() {
                                 continue;
                             }
 
-                            let src_full_url: String =
-                                resolve_url(&url, &iframe_src).unwrap_or(str!());
+                            let src_full_url = resolve_url(&url, iframe_src).unwrap_or_default();
                             let (iframe_data, iframe_final_url) = retrieve_asset(
                                 cache,
                                 client,
@@ -401,18 +402,18 @@ pub fn walk_and_embed_assets(
                 "video" => {
                     for attr in attrs_mut.iter_mut() {
                         if &attr.name.local == "poster" {
-                            let video_poster = attr.value.to_string();
+                            let video_poster = attr.value.as_ref();
 
                             // Skip posters with empty source
-                            if video_poster == str!() {
+                            if video_poster.is_empty() {
                                 continue;
                             }
 
                             if opt_no_images {
                                 attr.value.clear();
                             } else {
-                                let poster_full_url: String =
-                                    resolve_url(&url, &video_poster).unwrap_or(str!());
+                                let poster_full_url =
+                                    resolve_url(&url, video_poster).unwrap_or_default();
                                 let (poster_dataurl, _) = retrieve_asset(
                                     cache,
                                     client,
@@ -981,9 +982,7 @@ fn get_child_node_by_name(handle: &Handle, node_name: &str) -> Handle {
     });
     match matching_children {
         Some(node) => node.clone(),
-        _ => {
-            return handle.clone();
-        }
+        _ => handle.clone(),
     }
 }
 
@@ -999,7 +998,7 @@ pub fn stringify_document(
     serialize(&mut buf, handle, SerializeOpts::default())
         .expect("unable to serialize DOM into buffer");
 
-    let mut result: String = String::from_utf8(buf).unwrap();
+    let mut result = String::from_utf8(buf).unwrap();
 
     if opt_isolate || opt_no_css || opt_no_frames || opt_no_js || opt_no_images {
         let mut buf: Vec<u8> = Vec::new();
@@ -1023,7 +1022,6 @@ pub fn stringify_document(
         if opt_no_images {
             content_attr += " img-src data:;";
         }
-        content_attr = content_attr.trim().to_string();
 
         let meta = dom.create_element(
             QualName::new(None, ns!(), local_name!("meta")),
@@ -1034,7 +1032,7 @@ pub fn stringify_document(
                 },
                 Attribute {
                     name: QualName::new(None, ns!(), local_name!("content")),
-                    value: format_tendril!("{}", content_attr),
+                    value: format_tendril!("{}", content_attr.trim()),
                 },
             ],
             Default::default(),

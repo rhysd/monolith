@@ -1,7 +1,5 @@
-use base64;
-
-use self::base64::encode;
 use crate::http::retrieve_asset;
+use base64::encode;
 use regex::Regex;
 #[cfg(not(target_arch = "wasm32"))]
 use reqwest::Client;

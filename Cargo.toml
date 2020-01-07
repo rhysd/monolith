@@ -1,15 +1,16 @@
 [package]
 name = "monolith"
 version = "2.1.1"
+edition = "2018"
 authors = [
     "Sunshine <sunshine@uberspace.net>",
     "Mahdi Robatipoor <mahdi.robatipoor@gmail.com>",
     "Emmanuel Delaborde <th3rac25@gmail.com>",
     "rhysd <https://rhysd.github.io>",
     "Emi Simpson <emi@alchemi.dev>",
+    "rhysd <lin90162@yahoo.co.jp>",
 ]
 description = "CLI tool for saving web pages as a single HTML file"
-edition = "2018"
 
 [dependencies]
 base64 = "0.10.1"

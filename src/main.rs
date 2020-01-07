@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate clap;
-extern crate monolith;
-extern crate reqwest;
 
 mod args;
 mod macros;
