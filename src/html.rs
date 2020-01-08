@@ -11,7 +11,7 @@ use html5ever::tendril::{format_tendril, Tendril, TendrilSink};
 use html5ever::tree_builder::{Attribute, TreeSink};
 use html5ever::{local_name, namespace_url, ns};
 #[cfg(not(target_arch = "wasm32"))]
-use reqwest::Client;
+use reqwest::blocking::Client;
 use std::collections::HashMap;
 use std::default::Default;
 
@@ -530,7 +530,8 @@ pub fn walk_and_embed_assets<'a>(
                         opt_no_images,
                         opt_silent,
                         opt_no_frames,
-                    ).await;
+                    )
+                    .await;
                 }
             }
             NodeData::Element {
@@ -605,7 +606,9 @@ pub fn walk_and_embed_assets<'a>(
                                             false,
                                             "text/css",
                                             opt_silent,
-                                        ).await {
+                                        )
+                                        .await
+                                        {
                                             // On successful retrieval, traverse CSS
                                             Ok((css_data, _)) => resolve_css_imports(
                                                 cache,
@@ -636,7 +639,8 @@ pub fn walk_and_embed_assets<'a>(
                             for attr in attrs_mut.iter_mut() {
                                 if &attr.name.local == "href" {
                                     let href_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
+                                        resolve_url(&url, &attr.value.to_string())
+                                            .unwrap_or(str!());
                                     attr.value.clear();
                                     attr.value.push_slice(&href_full_url.as_str());
                                 }
@@ -671,16 +675,14 @@ pub fn walk_and_embed_assets<'a>(
                             .map(|attr| &attr.value)
                             .filter(|src| !src.is_empty()) // Ignore empty srcs
                             .next()
-                            .and_then(|src| resolve_url(&url, src).ok()) // Make absolute
+                            .and_then(|src| resolve_url(&url, src).ok())
+                        // Make absolute
                         {
                             // Download and convert to dataurl
-                            if let Some((dataurl, _)) = retrieve_asset(
-                                    cache,
-                                    &abs_src,
-                                    true,
-                                    "",
-                                    opt_silent,
-                                ).await.ok()
+                            if let Some((dataurl, _)) =
+                                retrieve_asset(cache, &abs_src, true, "", opt_silent)
+                                    .await
+                                    .ok()
                             {
                                 // Add the new dataurl src attribute
                                 attrs_mut.push(Attribute {
@@ -695,8 +697,9 @@ pub fn walk_and_embed_assets<'a>(
                             let attr_name: &str = &attr.name.local;
 
                             if attr_name == "src" {
-                                let src_full_url: String = resolve_url(&url, &attr.value.to_string())
-                                    .unwrap_or(attr.value.to_string());
+                                let src_full_url: String =
+                                    resolve_url(&url, &attr.value.to_string())
+                                        .unwrap_or(attr.value.to_string());
                                 attr.value.clear();
                                 attr.value.push_slice(src_full_url.as_str());
                             } else if attr_name == "srcset" {
@@ -763,7 +766,8 @@ pub fn walk_and_embed_assets<'a>(
                             for attr in attrs_mut.iter_mut() {
                                 if &attr.name.local == "src" {
                                     let src_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
+                                        resolve_url(&url, &attr.value.to_string())
+                                            .unwrap_or(str!());
                                     let (js_dataurl, _) = retrieve_asset(
                                         cache,
                                         &src_full_url,
@@ -809,7 +813,8 @@ pub fn walk_and_embed_assets<'a>(
                                 // Modify action to be a full URL
                                 if !is_valid_url(&attr.value) {
                                     let href_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
+                                        resolve_url(&url, &attr.value.to_string())
+                                            .unwrap_or(str!());
                                     attr.value.clear();
                                     attr.value.push_slice(href_full_url.as_str());
                                 }
@@ -853,9 +858,11 @@ pub fn walk_and_embed_assets<'a>(
                                     opt_no_images,
                                     opt_silent,
                                     opt_no_frames,
-                                ).await;
+                                )
+                                .await;
                                 let mut buf: Vec<u8> = Vec::new();
-                                serialize(&mut buf, &dom.document, SerializeOpts::default()).unwrap();
+                                serialize(&mut buf, &dom.document, SerializeOpts::default())
+                                    .unwrap();
                                 let iframe_dataurl = data_to_dataurl("text/html", &buf);
                                 attr.value.clear();
                                 attr.value.push_slice(iframe_dataurl.as_str());
@@ -954,7 +961,8 @@ pub fn walk_and_embed_assets<'a>(
                         opt_no_images,
                         opt_silent,
                         opt_no_frames,
-                    ).await;
+                    )
+                    .await;
                 }
             }
             _ => {

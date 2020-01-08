@@ -6,7 +6,6 @@ authors = [
     "Sunshine <sunshine@uberspace.net>",
     "Mahdi Robatipoor <mahdi.robatipoor@gmail.com>",
     "Emmanuel Delaborde <th3rac25@gmail.com>",
-    "rhysd <https://rhysd.github.io>",
     "Emi Simpson <emi@alchemi.dev>",
     "rhysd <lin90162@yahoo.co.jp>",
 ]
@@ -20,8 +19,12 @@ url = "2.1.0"
 regex = "1.3.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-reqwest = "0.9.20"
 clap = "2.33.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies.reqwest]
+version = "0.10.*"
+default-features = false
+features = ["default-tls", "blocking", "gzip"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "~0.2.55"

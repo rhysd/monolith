@@ -2,7 +2,7 @@ use crate::http::retrieve_asset;
 use base64::encode;
 use regex::Regex;
 #[cfg(not(target_arch = "wasm32"))]
-use reqwest::Client;
+use reqwest::blocking::Client;
 use std::collections::HashMap;
 use url::{ParseError, Url};
 
@@ -207,7 +207,8 @@ pub fn resolve_css_imports<'a>(
     href: &'a str,
     opt_no_images: bool,
     opt_silent: bool,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, wasm_bindgen::JsValue>> + 'a>> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, wasm_bindgen::JsValue>> + 'a>>
+{
     use web_sys::console;
 
     Box::pin(async move {
@@ -245,7 +246,8 @@ pub fn resolve_css_imports<'a>(
                     &embedded_url,
                     opt_no_images,
                     opt_silent,
-                ).await
+                )
+                .await
             } else if (is_image && !opt_no_images) || is_font {
                 // The link is some other, non-@import link
                 retrieve_asset(
