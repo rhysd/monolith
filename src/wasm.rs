@@ -1,9 +1,9 @@
-use std::result::Result;
-use std::collections::HashMap;
-use wasm_bindgen::prelude::*;
 use crate::html::{html_to_dom, stringify_document, walk_and_embed_assets};
 use crate::http::retrieve_asset;
 use crate::utils::is_valid_url;
+use std::collections::HashMap;
+use std::result::Result;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct MonolithOptions {
@@ -57,11 +57,13 @@ impl MonolithOptions {
     }
 }
 
-
 // Entrypoints for WebAssembly port of monolith. This function will be called from JavaScript
 
 #[wasm_bindgen(js_name = monolithOfUrl)]
-pub async fn monolith_of_url(url_target: String, options: MonolithOptions) -> Result<String, JsValue> {
+pub async fn monolith_of_url(
+    url_target: String,
+    options: MonolithOptions,
+) -> Result<String, JsValue> {
     if !is_valid_url(url_target.as_str()) {
         return Err(format!("Not a valid URL: {}", url_target).into());
     }
@@ -76,14 +78,7 @@ pub async fn monolith_of_url(url_target: String, options: MonolithOptions) -> Re
     } = options;
 
     let cache = &mut HashMap::new();
-    let (data, final_url) = retrieve_asset(
-        cache,
-        url_target.as_str(),
-        false,
-        "",
-        silent,
-    )
-    .await?;
+    let (data, final_url) = retrieve_asset(cache, url_target.as_str(), false, "", silent).await?;
     let dom = html_to_dom(&data);
 
     walk_and_embed_assets(
@@ -95,22 +90,20 @@ pub async fn monolith_of_url(url_target: String, options: MonolithOptions) -> Re
         no_images,
         silent,
         no_frames,
-    ).await;
+    )
+    .await;
 
-    let html = stringify_document(
-        &dom.document,
-        no_css,
-        no_frames,
-        no_js,
-        no_images,
-        isolate,
-    );
+    let html = stringify_document(&dom.document, no_css, no_frames, no_js, no_images, isolate);
 
     Ok(html)
 }
 
 #[wasm_bindgen(js_name = monolithOfHtml)]
-pub async fn monolith_of_html(html: String, final_url: String, options: MonolithOptions) -> Result<String, JsValue> {
+pub async fn monolith_of_html(
+    html: String,
+    final_url: String,
+    options: MonolithOptions,
+) -> Result<String, JsValue> {
     let MonolithOptions {
         no_css,
         no_frames,
@@ -131,16 +124,10 @@ pub async fn monolith_of_html(html: String, final_url: String, options: Monolith
         no_images,
         silent,
         no_frames,
-    ).await;
+    )
+    .await;
 
-    let html = stringify_document(
-        &dom.document,
-        no_css,
-        no_frames,
-        no_js,
-        no_images,
-        isolate,
-    );
+    let html = stringify_document(&dom.document, no_css, no_frames, no_js, no_images, isolate);
 
     Ok(html)
 }
