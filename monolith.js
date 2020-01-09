@@ -18,10 +18,10 @@ function addHeapObject(obj) {
     return idx;
 }
 function __wbg_elem_binding0(arg0, arg1, arg2) {
-    wasm.__wbg_function_table.get(114)(arg0, arg1, addHeapObject(arg2));
+    wasm.__wbg_function_table.get(346)(arg0, arg1, addHeapObject(arg2));
 }
 function __wbg_elem_binding1(arg0, arg1, arg2, arg3) {
-    wasm.__wbg_function_table.get(136)(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+    wasm.__wbg_function_table.get(368)(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 let WASM_VECTOR_LEN = 0;
@@ -330,7 +330,7 @@ export const __wbindgen_throw = function(arg0, arg1) {
     throw new Error(getStringFromWasm(arg0, arg1));
 };
 
-export const __wbindgen_closure_wrapper308 = function(arg0, arg1, arg2) {
+export const __wbindgen_closure_wrapper1076 = function(arg0, arg1, arg2) {
     const state = { a: arg0, b: arg1, cnt: 1 };
     const real = (arg0) => {
         state.cnt++;
@@ -339,7 +339,7 @@ export const __wbindgen_closure_wrapper308 = function(arg0, arg1, arg2) {
         try {
             return __wbg_elem_binding0(a, state.b, arg0);
         } finally {
-            if (--state.cnt === 0) wasm.__wbg_function_table.get(115)(a, state.b);
+            if (--state.cnt === 0) wasm.__wbg_function_table.get(347)(a, state.b);
             else state.a = a;
         }
     }
