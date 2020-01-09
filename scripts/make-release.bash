@@ -23,6 +23,11 @@ if [[ "$branch" != "wasm" ]]; then
     exit 1
 fi
 
+echo "Ensuring that wasm-release branch is up-to-date"
+git checkout wasm-release
+git pull
+git checkout -
+
 sha="$(git rev-parse HEAD)"
 
 echo "Releasing ${sha} to wasm-release branch"
