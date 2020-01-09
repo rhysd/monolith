@@ -15,7 +15,7 @@ function timeout10s(url) {
 
 export async function fetchData(url, wantBinary) {
     // Send request with 10 seconds timeout
-    const res = await Promise.race([fetch(url, { mode: 'no-cors' }), timeout10s(url)]);
+    const res = await Promise.race([fetch(url), timeout10s(url)]);
 
     if (!res.ok) {
         throw new Error(`Fetching ${url} failed with status ${res.status} (${res.statusText})`);
