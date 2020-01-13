@@ -2,7 +2,7 @@
 
 set -e
 
-if [ ! -d .git ]; then
+if [ ! -e .git ]; then
     echo 'This script must be run at root directory of this repository' >&2
     exit 1
 fi
