@@ -1,4 +1,6 @@
 use crate::utils::{clean_url, data_to_dataurl, is_data_url};
+#[cfg(target_arch = "wasm32")]
+use crate::wasm_dummy_client::Client;
 #[cfg(not(target_arch = "wasm32"))]
 use reqwest::blocking::Client;
 #[cfg(not(target_arch = "wasm32"))]
@@ -92,6 +94,7 @@ extern "C" {
 #[cfg(target_arch = "wasm32")]
 pub async fn retrieve_asset(
     cache: &mut HashMap<String, String>,
+    _client: &Client,
     url: &str,
     as_dataurl: bool,
     mime: &str,

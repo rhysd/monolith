@@ -1,4 +1,6 @@
 use crate::http::retrieve_asset;
+#[cfg(target_arch = "wasm32")]
+use crate::wasm_dummy_client::Client;
 use base64::encode;
 use regex::Regex;
 #[cfg(not(target_arch = "wasm32"))]
@@ -202,6 +204,7 @@ pub fn resolve_css_imports(
 #[cfg(target_arch = "wasm32")]
 pub fn resolve_css_imports<'a>(
     cache: &'a mut HashMap<String, String>,
+    client: &'a Client,
     css_string: &'a str,
     as_dataurl: bool,
     href: &'a str,
@@ -233,6 +236,7 @@ pub fn resolve_css_imports<'a>(
                 // The link is an @import link
                 let (content, _) = retrieve_asset(
                     cache,
+                    client,
                     &embedded_url,
                     false,      // Formating as data URL will be done later
                     "text/css", // Expect CSS
@@ -241,6 +245,7 @@ pub fn resolve_css_imports<'a>(
                 .await?;
                 resolve_css_imports(
                     cache,
+                    client,
                     &content,
                     true, // Finally, convert to a dataurl
                     &embedded_url,
@@ -252,6 +257,7 @@ pub fn resolve_css_imports<'a>(
                 // The link is some other, non-@import link
                 retrieve_asset(
                     cache,
+                    client,
                     &embedded_url,
                     true, // Format as data URL
                     "",   // Unknown MIME type

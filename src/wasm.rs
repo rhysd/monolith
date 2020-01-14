@@ -1,6 +1,7 @@
 use crate::html::{html_to_dom, stringify_document, walk_and_embed_assets};
 use crate::http::retrieve_asset;
 use crate::utils::is_valid_url;
+use crate::wasm_dummy_client::Client;
 use std::collections::HashMap;
 use std::result::Result;
 use wasm_bindgen::prelude::*;
@@ -78,11 +79,14 @@ pub async fn monolith_of_url(
     } = options;
 
     let cache = &mut HashMap::new();
-    let (data, final_url) = retrieve_asset(cache, url_target.as_str(), false, "", silent).await?;
+    let client = Client::new();
+    let (data, final_url) =
+        retrieve_asset(cache, &client, url_target.as_str(), false, "", silent).await?;
     let dom = html_to_dom(&data);
 
     walk_and_embed_assets(
         cache,
+        &client,
         &final_url,
         &dom.document,
         no_css,
@@ -113,10 +117,12 @@ pub async fn monolith_of_html(
         silent,
     } = options;
     let cache = &mut HashMap::new();
+    let client = Client::new();
     let dom = html_to_dom(&html);
 
     walk_and_embed_assets(
         cache,
+        &client,
         &final_url,
         &dom.document,
         no_css,

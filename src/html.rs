@@ -3,6 +3,8 @@ use crate::js::attr_is_event_handler;
 use crate::utils::{
     data_to_dataurl, is_valid_url, resolve_css_imports, resolve_url, url_has_protocol,
 };
+#[cfg(target_arch = "wasm32")]
+use crate::wasm_dummy_client::Client;
 use html5ever::interface::QualName;
 use html5ever::parse_document;
 use html5ever::rcdom::{Handle, NodeData, RcDom};
@@ -534,6 +536,7 @@ pub fn walk_and_embed_assets(
 #[cfg(target_arch = "wasm32")]
 pub fn walk_and_embed_assets<'a>(
     cache: &'a mut HashMap<String, String>,
+    client: &'a Client,
     url: &'a str,
     node: &'a Handle,
     opt_no_css: bool,
@@ -551,6 +554,7 @@ pub fn walk_and_embed_assets<'a>(
                 for child in node.children.borrow().iter() {
                     walk_and_embed_assets(
                         cache,
+                        client,
                         &url,
                         child,
                         opt_no_css,
@@ -623,6 +627,7 @@ pub fn walk_and_embed_assets<'a>(
                                                     .unwrap_or_default();
                                             let (favicon_dataurl, _) = retrieve_asset(
                                                 cache,
+                                                client,
                                                 &href_full_url,
                                                 true,
                                                 "",
@@ -647,6 +652,7 @@ pub fn walk_and_embed_assets<'a>(
                                                     .unwrap_or_default();
                                             let replacement_text = match retrieve_asset(
                                                 cache,
+                                                client,
                                                 &href_full_url,
                                                 false,
                                                 "text/css",
@@ -657,6 +663,7 @@ pub fn walk_and_embed_assets<'a>(
                                                 // On successful retrieval, traverse CSS
                                                 Ok((css_data, _)) => resolve_css_imports(
                                                     cache,
+                                                    client,
                                                     &css_data,
                                                     true,
                                                     &href_full_url,
@@ -733,7 +740,7 @@ pub fn walk_and_embed_assets<'a>(
                         {
                             // Download and convert to dataurl
                             if let Some((dataurl, _)) =
-                                retrieve_asset(cache, &abs_src, true, "", opt_silent)
+                                retrieve_asset(cache, client, &abs_src, true, "", opt_silent)
                                     .await
                                     .ok()
                             {
@@ -764,6 +771,7 @@ pub fn walk_and_embed_assets<'a>(
                                             .unwrap_or_default();
                                         let (source_dataurl, _) = retrieve_asset(
                                             cache,
+                                            client,
                                             &srcset_full_url,
                                             true,
                                             "",
@@ -821,6 +829,7 @@ pub fn walk_and_embed_assets<'a>(
                                         resolve_url(&url, attr.value.trim()).unwrap_or_default();
                                     let (js_dataurl, _) = retrieve_asset(
                                         cache,
+                                        client,
                                         &src_full_url,
                                         true,
                                         "application/javascript",
@@ -844,6 +853,7 @@ pub fn walk_and_embed_assets<'a>(
                                     let mut tendril = contents.borrow_mut();
                                     let replacement = resolve_css_imports(
                                         cache,
+                                        client,
                                         tendril.as_ref(),
                                         false,
                                         &url,
@@ -892,6 +902,7 @@ pub fn walk_and_embed_assets<'a>(
                                     resolve_url(&url, iframe_src).unwrap_or_default();
                                 let (iframe_data, iframe_final_url) = retrieve_asset(
                                     cache,
+                                    client,
                                     &src_full_url,
                                     false,
                                     "text/html",
@@ -902,6 +913,7 @@ pub fn walk_and_embed_assets<'a>(
                                 let dom = html_to_dom(&iframe_data);
                                 walk_and_embed_assets(
                                     cache,
+                                    client,
                                     &iframe_final_url,
                                     &dom.document,
                                     opt_no_css,
@@ -937,6 +949,7 @@ pub fn walk_and_embed_assets<'a>(
                                         resolve_url(&url, video_poster).unwrap_or_default();
                                     let (poster_dataurl, _) = retrieve_asset(
                                         cache,
+                                        client,
                                         &poster_full_url,
                                         true,
                                         "",
@@ -974,6 +987,7 @@ pub fn walk_and_embed_assets<'a>(
                     {
                         let replacement = resolve_css_imports(
                             cache,
+                            client,
                             attribute.value.as_ref(),
                             false,
                             &url,
@@ -1005,6 +1019,7 @@ pub fn walk_and_embed_assets<'a>(
                 for child in node.children.borrow().iter() {
                     walk_and_embed_assets(
                         cache,
+                        client,
                         &url,
                         child,
                         opt_no_css,
