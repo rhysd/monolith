@@ -1,4 +1,4 @@
-import { fetchData, FetchedData } from './snippets/monolith-296bbe604794110b/src/fetch.js';
+import { FetchedData, fetchData } from './snippets/monolith-296bbe604794110b/src/fetch.js';
 import * as wasm from './monolith_bg.wasm';
 
 const heap = new Array(32);
@@ -18,10 +18,10 @@ function addHeapObject(obj) {
     return idx;
 }
 function __wbg_elem_binding0(arg0, arg1, arg2) {
-    wasm.__wbg_function_table.get(351)(arg0, arg1, addHeapObject(arg2));
+    wasm.__wbg_function_table.get(346)(arg0, arg1, addHeapObject(arg2));
 }
 function __wbg_elem_binding1(arg0, arg1, arg2, arg3) {
-    wasm.__wbg_function_table.get(373)(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+    wasm.__wbg_function_table.get(368)(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 let WASM_VECTOR_LEN = 0;
@@ -214,6 +214,11 @@ export class MonolithOptions {
     }
 }
 
+export const __wbg_instanceof_FetchedData_7514b42059303918 = function(arg0) {
+    const ret = getObject(arg0) instanceof FetchedData;
+    return ret;
+};
+
 export const __wbg_fetchData_c2ccb2db5427c695 = function(arg0, arg1, arg2) {
     const ret = fetchData(getStringFromWasm(arg0, arg1), arg2 !== 0);
     return addHeapObject(ret);
@@ -226,11 +231,6 @@ export const __wbindgen_string_new = function(arg0, arg1) {
 
 export const __wbindgen_object_drop_ref = function(arg0) {
     takeObject(arg0);
-};
-
-export const __wbg_instanceof_FetchedData_7514b42059303918 = function(arg0) {
-    const ret = getObject(arg0) instanceof FetchedData;
-    return ret;
 };
 
 export const __wbg_url_71943e079e5a8b69 = function(arg0, arg1) {
@@ -339,7 +339,7 @@ export const __wbindgen_closure_wrapper1076 = function(arg0, arg1, arg2) {
         try {
             return __wbg_elem_binding0(a, state.b, arg0);
         } finally {
-            if (--state.cnt === 0) wasm.__wbg_function_table.get(352)(a, state.b);
+            if (--state.cnt === 0) wasm.__wbg_function_table.get(347)(a, state.b);
             else state.a = a;
         }
     }
