@@ -571,8 +571,6 @@ pub fn walk_and_embed_assets<'a>(
 
                 match name.local.as_ref() {
                     "link" => {
-                        let mut link_type: &str = "";
-
                         // Remove integrity attributes
                         let mut i = 0;
                         while i < attrs_mut.len() {
@@ -584,93 +582,121 @@ pub fn walk_and_embed_assets<'a>(
                             }
                         }
 
+                        enum LinkType {
+                            Icon,
+                            Stylesheet,
+                            Preload,
+                            DnsPrefetch,
+                            Unknown,
+                        }
+
+                        let mut link_type = LinkType::Unknown;
                         for attr in attrs_mut.iter_mut() {
                             if &attr.name.local == "rel" {
-                                if is_icon(&attr.value.to_string()) {
-                                    link_type = "icon";
+                                let value = attr.value.trim();
+                                if is_icon(value) {
+                                    link_type = LinkType::Icon;
                                     break;
-                                } else if attr.value.to_string() == "stylesheet" {
-                                    link_type = "stylesheet";
+                                } else if value.eq_ignore_ascii_case("stylesheet") {
+                                    link_type = LinkType::Stylesheet;
+                                    break;
+                                } else if value.eq_ignore_ascii_case("preload") {
+                                    link_type = LinkType::Preload;
+                                    break;
+                                } else if value.eq_ignore_ascii_case("dns-prefetch") {
+                                    link_type = LinkType::DnsPrefetch;
                                     break;
                                 }
                             }
                         }
+                        let link_type = link_type;
 
-                        if link_type == "icon" {
-                            for attr in attrs_mut.iter_mut() {
-                                if &attr.name.local == "href" {
-                                    if opt_no_images {
-                                        attr.value.clear();
-                                    } else {
-                                        let href_full_url: String =
-                                            resolve_url(&url, &attr.value.to_string())
-                                                .unwrap_or(str!());
-                                        let (favicon_dataurl, _) = retrieve_asset(
-                                            cache,
-                                            &href_full_url,
-                                            true,
-                                            "",
-                                            opt_silent,
-                                        )
-                                        .await
-                                        .unwrap_or((str!(), str!()));
-                                        attr.value.clear();
-                                        attr.value.push_slice(favicon_dataurl.as_str());
-                                    }
-                                }
-                            }
-                        } else if link_type == "stylesheet" {
-                            for attr in attrs_mut.iter_mut() {
-                                if &attr.name.local == "href" {
-                                    if opt_no_css {
-                                        attr.value.clear();
-                                    } else {
-                                        let href_full_url: String =
-                                            resolve_url(&url, &attr.value.to_string())
-                                                .unwrap_or(str!());
-                                        let replacement_text = match retrieve_asset(
-                                            cache,
-                                            &href_full_url,
-                                            false,
-                                            "text/css",
-                                            opt_silent,
-                                        )
-                                        .await
-                                        {
-                                            // On successful retrieval, traverse CSS
-                                            Ok((css_data, _)) => resolve_css_imports(
+                        match link_type {
+                            LinkType::Icon => {
+                                for attr in attrs_mut.iter_mut() {
+                                    if &attr.name.local == "href" {
+                                        if opt_no_images {
+                                            attr.value.clear();
+                                        } else {
+                                            let href_full_url =
+                                                resolve_url(&url, attr.value.as_ref())
+                                                    .unwrap_or_default();
+                                            let (favicon_dataurl, _) = retrieve_asset(
                                                 cache,
-                                                &css_data,
-                                                true,
                                                 &href_full_url,
-                                                opt_no_images,
+                                                true,
+                                                "",
                                                 opt_silent,
                                             )
                                             .await
-                                            .unwrap_or(str!()),
-
-                                            // If a network error occured, warn
-                                            Err(e) => {
-                                                console::error_1(&e);
-
-                                                // If failed to resolve, replace with absolute URL
-                                                href_full_url
-                                            }
-                                        };
-
-                                        attr.value.clear();
-                                        attr.value.push_slice(&replacement_text);
+                                            .unwrap_or_default();
+                                            attr.value.clear();
+                                            attr.value.push_slice(favicon_dataurl.as_str());
+                                        }
                                     }
                                 }
                             }
-                        } else {
-                            for attr in attrs_mut.iter_mut() {
-                                if &attr.name.local == "href" {
-                                    let href_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(str!());
+                            LinkType::Stylesheet => {
+                                for attr in attrs_mut.iter_mut() {
+                                    if &attr.name.local == "href" {
+                                        if opt_no_css {
+                                            attr.value.clear();
+                                        } else {
+                                            let href_full_url =
+                                                resolve_url(&url, &attr.value.as_ref())
+                                                    .unwrap_or_default();
+                                            let replacement_text = match retrieve_asset(
+                                                cache,
+                                                &href_full_url,
+                                                false,
+                                                "text/css",
+                                                opt_silent,
+                                            )
+                                            .await
+                                            {
+                                                // On successful retrieval, traverse CSS
+                                                Ok((css_data, _)) => resolve_css_imports(
+                                                    cache,
+                                                    &css_data,
+                                                    true,
+                                                    &href_full_url,
+                                                    opt_no_images,
+                                                    opt_silent,
+                                                )
+                                                .await
+                                                .unwrap_or_default(),
+
+                                                // If a network error occured, warn
+                                                Err(e) => {
+                                                    console::error_1(&e);
+
+                                                    // If failed to resolve, replace with absolute URL
+                                                    href_full_url
+                                                }
+                                            };
+
+                                            attr.value.clear();
+                                            attr.value.push_slice(&replacement_text);
+                                        }
+                                    }
+                                }
+                            }
+                            LinkType::Preload | LinkType::DnsPrefetch => {
+                                // Since all resources are embedded as data URL, preloading and prefetching are unnecessary
+                                if let Some(attr) =
+                                    attrs_mut.iter_mut().find(|a| &a.name.local == "href")
+                                {
                                     attr.value.clear();
-                                    attr.value.push_slice(&href_full_url.as_str());
+                                }
+                            }
+                            LinkType::Unknown => {
+                                for attr in attrs_mut.iter_mut() {
+                                    if &attr.name.local == "href" {
+                                        let href_full_url = resolve_url(&url, attr.value.as_ref())
+                                            .unwrap_or_default();
+                                        attr.value.clear();
+                                        attr.value.push_slice(&href_full_url.as_str());
+                                    }
                                 }
                             }
                         }
@@ -704,7 +730,6 @@ pub fn walk_and_embed_assets<'a>(
                             .filter(|src| !src.is_empty()) // Ignore empty srcs
                             .next()
                             .and_then(|src| resolve_url(&url, src).ok())
-                        // Make absolute
                         {
                             // Download and convert to dataurl
                             if let Some((dataurl, _)) =
@@ -725,9 +750,8 @@ pub fn walk_and_embed_assets<'a>(
                             let attr_name: &str = &attr.name.local;
 
                             if attr_name == "src" {
-                                let src_full_url: String =
-                                    resolve_url(&url, &attr.value.to_string())
-                                        .unwrap_or(attr.value.to_string());
+                                let src_full_url = resolve_url(&url, attr.value.trim())
+                                    .unwrap_or_else(|_| attr.value.to_string());
                                 attr.value.clear();
                                 attr.value.push_slice(src_full_url.as_str());
                             } else if attr_name == "srcset" {
@@ -736,9 +760,8 @@ pub fn walk_and_embed_assets<'a>(
                                         attr.value.clear();
                                         attr.value.push_slice(TRANSPARENT_PIXEL);
                                     } else {
-                                        let srcset_full_url: String =
-                                            resolve_url(&url, &attr.value.to_string())
-                                                .unwrap_or(str!());
+                                        let srcset_full_url = resolve_url(&url, attr.value.trim())
+                                            .unwrap_or_default();
                                         let (source_dataurl, _) = retrieve_asset(
                                             cache,
                                             &srcset_full_url,
@@ -747,7 +770,7 @@ pub fn walk_and_embed_assets<'a>(
                                             opt_silent,
                                         )
                                         .await
-                                        .unwrap_or((str!(), str!()));
+                                        .unwrap_or_default();
                                         attr.value.clear();
                                         attr.value.push_slice(source_dataurl.as_str());
                                     }
@@ -758,13 +781,14 @@ pub fn walk_and_embed_assets<'a>(
                     "a" => {
                         for attr in attrs_mut.iter_mut() {
                             if &attr.name.local == "href" {
+                                let attr_value = attr.value.trim();
                                 // Don't touch email links or hrefs which begin with a hash sign
-                                if attr.value.starts_with('#') || url_has_protocol(&attr.value) {
+                                if attr_value.starts_with('#') || url_has_protocol(attr_value) {
                                     continue;
                                 }
 
-                                let href_full_url: String =
-                                    resolve_url(&url, &attr.value.to_string()).unwrap_or(str!());
+                                let href_full_url =
+                                    resolve_url(&url, attr_value).unwrap_or_default();
                                 attr.value.clear();
                                 attr.value.push_slice(href_full_url.as_str());
                             }
@@ -793,9 +817,8 @@ pub fn walk_and_embed_assets<'a>(
                         } else {
                             for attr in attrs_mut.iter_mut() {
                                 if &attr.name.local == "src" {
-                                    let src_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(str!());
+                                    let src_full_url =
+                                        resolve_url(&url, attr.value.trim()).unwrap_or_default();
                                     let (js_dataurl, _) = retrieve_asset(
                                         cache,
                                         &src_full_url,
@@ -804,7 +827,7 @@ pub fn walk_and_embed_assets<'a>(
                                         opt_silent,
                                     )
                                     .await
-                                    .unwrap_or((str!(), str!()));
+                                    .unwrap_or_default();
                                     attr.value.clear();
                                     attr.value.push_slice(js_dataurl.as_str());
                                 }
@@ -828,7 +851,7 @@ pub fn walk_and_embed_assets<'a>(
                                         opt_silent,
                                     )
                                     .await
-                                    .unwrap_or(str!());
+                                    .unwrap_or_default();
                                     tendril.clear();
                                     tendril.push_slice(&replacement);
                                 }
@@ -838,11 +861,11 @@ pub fn walk_and_embed_assets<'a>(
                     "form" => {
                         for attr in attrs_mut.iter_mut() {
                             if &attr.name.local == "action" {
+                                let attr_value = attr.value.trim();
                                 // Modify action to be a full URL
-                                if !is_valid_url(&attr.value) {
-                                    let href_full_url: String =
-                                        resolve_url(&url, &attr.value.to_string())
-                                            .unwrap_or(str!());
+                                if !is_valid_url(attr_value) {
+                                    let href_full_url =
+                                        resolve_url(&url, attr_value).unwrap_or_default();
                                     attr.value.clear();
                                     attr.value.push_slice(href_full_url.as_str());
                                 }
@@ -858,15 +881,15 @@ pub fn walk_and_embed_assets<'a>(
                                     continue;
                                 }
 
-                                let iframe_src: String = attr.value.to_string();
+                                let iframe_src = attr.value.trim();
 
                                 // Ignore iframes with empty source (they cause infinite loops)
-                                if iframe_src == str!() {
+                                if iframe_src.is_empty() {
                                     continue;
                                 }
 
-                                let src_full_url: String =
-                                    resolve_url(&url, &iframe_src).unwrap_or(str!());
+                                let src_full_url =
+                                    resolve_url(&url, iframe_src).unwrap_or_default();
                                 let (iframe_data, iframe_final_url) = retrieve_asset(
                                     cache,
                                     &src_full_url,
@@ -900,18 +923,18 @@ pub fn walk_and_embed_assets<'a>(
                     "video" => {
                         for attr in attrs_mut.iter_mut() {
                             if &attr.name.local == "poster" {
-                                let video_poster = attr.value.to_string();
+                                let video_poster = attr.value.trim();
 
                                 // Skip posters with empty source
-                                if video_poster == str!() {
+                                if video_poster.is_empty() {
                                     continue;
                                 }
 
                                 if opt_no_images {
                                     attr.value.clear();
                                 } else {
-                                    let poster_full_url: String =
-                                        resolve_url(&url, &video_poster).unwrap_or(str!());
+                                    let poster_full_url =
+                                        resolve_url(&url, video_poster).unwrap_or_default();
                                     let (poster_dataurl, _) = retrieve_asset(
                                         cache,
                                         &poster_full_url,
@@ -958,7 +981,7 @@ pub fn walk_and_embed_assets<'a>(
                             opt_silent,
                         )
                         .await
-                        .unwrap_or(str!());
+                        .unwrap_or_default();
                         attribute.value.clear();
                         attribute.value.push_slice(&replacement);
                     }
